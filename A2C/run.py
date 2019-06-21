@@ -7,7 +7,7 @@ RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯�
 
 env = gym.make("CartPole-v0")
 env.seed(1)  # 固定隨機種子 for 再現性
-# env = env.unwrapped # 不限定 episode
+# env = env.unwrapped  # 不限定 episode
 
 print(env.action_space)
 print(env.observation_space)
@@ -17,7 +17,8 @@ print(env.observation_space.low)
 agent = A2C(
     n_actions=env.action_space.n,
     n_features=env.observation_space.shape[0],
-    learning_rate=0.001,
+    learning_rate=0.01,
+    gamma=0.9,
 )
 
 reward_history = []
@@ -51,18 +52,25 @@ for n_episode in range(3000):
         state_, reward, done, _ = env.step(action)
         agent.store_trajectory(state, action, reward, state_)
 
-        sumR += reward
+        agent.trainCriticTD()
 
+        sumR += reward
         if done:
             break
 
         state = state_
 
-        agent.trainCritic()
-
+    agent.trainCriticMC()
     agent.trainActor()
-    
+    agent.updateTarget()
+
     reward_history.append(sumR)
     if RENDER:
         plot_durations()
-    print("episode:", n_episode, "duration:", t, "Reward", sumR)
+
+    avgR = sum(reward_history[:-11:-1]) / 10
+    print(
+        "episode: {:4d} duration: {:4d} Reward: {:5.1f} avgR: {:5.1f}".format(
+            n_episode, t, sumR, avgR
+        )
+    )
