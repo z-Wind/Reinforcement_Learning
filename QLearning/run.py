@@ -3,7 +3,7 @@ from QLearning import QLearning
 import matplotlib.pyplot as plt
 import torch
 
-RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
+RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
 env = gym.make("CartPole-v0")
 env.seed(1)  # 固定隨機種子 for 再現性
@@ -17,7 +17,8 @@ print(env.observation_space.low)
 agent = QLearning(
     n_features=env.observation_space.shape[0],
     n_actions=env.action_space.n,
-    learning_rate=0.001,
+    learning_rate=0.01,
+    gamma=0.99,
 )
 
 reward_history = []
@@ -49,22 +50,24 @@ for n_episode in range(3000):
 
         action = agent.choose_action(state)
         state_, reward, done, _ = env.step(action)
-        agent.store_trajectory(state, action, reward, state_)
+        agent.store_trajectory(state, action, reward, done, state_)
 
         sumR += reward
+
+        agent.train()
 
         if done:
             break
 
         state = state_
 
-        agent.train()
-
     reward_history.append(sumR)
     if RENDER:
         plot_durations()
-    print("episode:", n_episode, "duration:", t, "Reward", sumR)
-    
-    if n_episode > 2500:
-        RENDER = True
 
+    avgR = sum(reward_history[:-11:-1]) / 10
+    print(
+        "episode: {:4d} duration: {:4d} Reward: {:5.1f} avgR: {:5.1f}".format(
+            n_episode, t, sumR, avgR
+        )
+    )
