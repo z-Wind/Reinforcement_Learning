@@ -5,7 +5,7 @@ import torch
 
 RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("CartPole-v0")
+env = gym.make("CartPole-v1")
 env.seed(1)  # 固定隨機種子 for 再現性
 # env = env.unwrapped # 不限定 episode
 
@@ -71,3 +71,10 @@ for n_episode in range(3000):
             n_episode, t, sumR, avgR
         )
     )
+
+    # 訓練成功條件
+    if avgR == 500 and n_episode > 10:
+        break
+
+# 儲存 model 參數
+torch.save(agent.net.state_dict(), "params.pkl")

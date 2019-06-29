@@ -1,23 +1,23 @@
 import gym
-from A2C import A2C
+from PolicyGradient import PolicyGradient
 import matplotlib.pyplot as plt
 import torch
 
 RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("CartPole-v1")
+env = gym.make("Acrobot-v1")
 env.seed(1)  # 固定隨機種子 for 再現性
-# env = env.unwrapped  # 不限定 episode
+# env = env.unwrapped # 不限定 episode
 
 print(env.action_space)
 print(env.observation_space)
 print(env.observation_space.high)
 print(env.observation_space.low)
 
-agent = A2C(
-    n_actions=env.action_space.n,
+agent = PolicyGradient(
     n_features=env.observation_space.shape[0],
-    learning_rate=0.01,
+    n_actions=env.action_space.n,
+    learning_rate=0.001,
     gamma=0.9,
 )
 
@@ -50,19 +50,16 @@ for n_episode in range(3000):
 
         action = agent.choose_action(state)
         state_, reward, done, _ = env.step(action)
-        agent.store_trajectory(state, action, reward, state_)
-
-        agent.trainCriticTD()
+        agent.store_trajectory(state, action, reward)
 
         sumR += reward
+
         if done:
             break
 
         state = state_
 
-    agent.trainCriticMC()
-    agent.trainActor()
-    agent.updateTarget()
+    agent.train()
 
     reward_history.append(sumR)
     if RENDER:
@@ -76,8 +73,8 @@ for n_episode in range(3000):
     )
 
     # 訓練成功條件
-    if avgR == 500 and n_episode > 10:
+    if avgR > -80 and n_episode > 10:
         break
 
 # 儲存 model 參數
-torch.save(agent.actorCriticEval.state_dict(), "params.pkl")
+torch.save(agent.net.state_dict(), "params.pkl")

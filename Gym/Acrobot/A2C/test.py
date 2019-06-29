@@ -3,11 +3,9 @@ from A2C import A2C
 import matplotlib.pyplot as plt
 import torch
 
-RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
+RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("CartPole-v1")
-env.seed(1)  # 固定隨機種子 for 再現性
-# env = env.unwrapped  # 不限定 episode
+env = gym.make("Acrobot-v1")
 
 print(env.action_space)
 print(env.observation_space)
@@ -20,6 +18,7 @@ agent = A2C(
     learning_rate=0.01,
     gamma=0.9,
 )
+agent.actorCriticEval.load_state_dict(torch.load("params.pkl"))
 
 reward_history = []
 
@@ -28,7 +27,7 @@ def plot_durations():
     y_t = torch.FloatTensor(reward_history)
     plt.figure(1)
     plt.clf()
-    plt.title("Training...")
+    plt.title("Testing...")
     plt.xlabel("Episode")
     plt.ylabel("Reward")
     plt.plot(y_t.numpy())
@@ -50,19 +49,12 @@ for n_episode in range(3000):
 
         action = agent.choose_action(state)
         state_, reward, done, _ = env.step(action)
-        agent.store_trajectory(state, action, reward, state_)
-
-        agent.trainCriticTD()
 
         sumR += reward
         if done:
             break
 
         state = state_
-
-    agent.trainCriticMC()
-    agent.trainActor()
-    agent.updateTarget()
 
     reward_history.append(sumR)
     if RENDER:
@@ -74,10 +66,3 @@ for n_episode in range(3000):
             n_episode, t, sumR, avgR
         )
     )
-
-    # 訓練成功條件
-    if avgR == 500 and n_episode > 10:
-        break
-
-# 儲存 model 參數
-torch.save(agent.actorCriticEval.state_dict(), "params.pkl")

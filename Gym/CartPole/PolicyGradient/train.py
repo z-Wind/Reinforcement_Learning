@@ -3,9 +3,9 @@ from PolicyGradient import PolicyGradient
 import matplotlib.pyplot as plt
 import torch
 
-RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
+RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("CartPole-v0")
+env = gym.make("CartPole-v1")
 env.seed(1)  # 固定隨機種子 for 再現性
 # env = env.unwrapped # 不限定 episode
 
@@ -50,7 +50,7 @@ for n_episode in range(3000):
         action = agent.choose_action(state)
         state_, reward, done, _ = env.step(action)
         agent.store_trajectory(state, action, reward)
-        
+
         sumR += reward
 
         if done:
@@ -59,8 +59,21 @@ for n_episode in range(3000):
         state = state_
 
     agent.train()
-    
+
     reward_history.append(sumR)
     if RENDER:
         plot_durations()
-    print("episode:", n_episode, "duration:", t, "Reward", sumR)
+
+    avgR = sum(reward_history[:-11:-1]) / 10
+    print(
+        "episode: {:4d} duration: {:4d} Reward: {:5.1f} avgR: {:5.1f}".format(
+            n_episode, t, sumR, avgR
+        )
+    )
+
+    # 訓練成功條件
+    if avgR == 500 and n_episode > 10:
+        break
+
+# 儲存 model 參數
+torch.save(agent.net.state_dict(), "params.pkl")
