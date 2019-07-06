@@ -19,6 +19,7 @@ agent = QLearning(
     gamma=0.99,
 )
 agent.net.load_state_dict(torch.load("params.pkl"))
+agent.net.eval()
 
 reward_history = []
 

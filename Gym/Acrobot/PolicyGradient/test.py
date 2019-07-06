@@ -18,6 +18,7 @@ agent = PolicyGradient(
     learning_rate=0.005,
 )
 agent.net.load_state_dict(torch.load("params.pkl"))
+agent.net.eval()
 
 reward_history = []
 

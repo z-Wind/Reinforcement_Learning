@@ -19,6 +19,7 @@ agent = A2C(
     gamma=0.9,
 )
 agent.actorCriticEval.load_state_dict(torch.load("params.pkl"))
+agent.actorCriticEval.eval()
 
 reward_history = []
 

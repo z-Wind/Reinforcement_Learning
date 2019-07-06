@@ -1,25 +1,26 @@
 import gym
-from QLearning import QLearning
+from A2C import A2C
 import matplotlib.pyplot as plt
 import torch
 
 RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("Acrobot-v1")
+env = gym.make("Pendulum-v0")
 
 print(env.action_space)
 print(env.observation_space)
 print(env.observation_space.high)
 print(env.observation_space.low)
 
-agent = QLearning(
+agent = A2C(
+    n_actions=env.action_space.shape[0],
+    n_actionRange=zip(env.action_space.high, env.action_space.low),
     n_features=env.observation_space.shape[0],
-    n_actions=env.action_space.n,
     learning_rate=0.01,
-    gamma=0.99,
+    gamma=0.9,
 )
-agent.net.load_state_dict(torch.load("params.pkl"))
-agent.net.eval()
+agent.actorCriticEval.load_state_dict(torch.load("params.pkl"))
+agent.actorCriticEval.eval()
 
 reward_history = []
 
