@@ -58,8 +58,7 @@ for n_episode in range(3000):
         action = agent.choose_action(state)
         state_, reward, done, _ = env.step(action)
 
-        if not done:
-            agent.store_trajectory(state, action, reward, done, state_)
+        agent.store_trajectory(state, action, reward, done, state_)
 
         agent.trainCriticTD()
         agent.trainActor()

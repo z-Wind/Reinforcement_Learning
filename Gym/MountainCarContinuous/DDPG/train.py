@@ -6,7 +6,7 @@ import torch
 
 RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("Pendulum-v0")
+env = gym.make("MountainCarContinuous-v0")
 env.seed(1)  # 固定隨機種子 for 再現性
 # env = env.unwrapped  # 不限定 episode
 
@@ -23,9 +23,9 @@ agent = DDPG(
     n_features=env.observation_space.shape[0],
     learning_rate=0.001,
     gamma=0.99,
-    tau=0.001,
+    tau=0.01,
     mSize=10000,
-    batchSize=100,
+    batchSize=200,
 )
 
 reward_history = []
@@ -57,7 +57,6 @@ for n_episode in range(3000):
 
         action = agent.choose_action(state, t)
         state_, reward, done, _ = env.step(action)
-
         agent.store_trajectory(state, action, reward, done, state_)
 
         agent.trainCriticTD()
@@ -83,7 +82,7 @@ for n_episode in range(3000):
     )
 
     # 訓練成功條件
-    if avgR > -100 and n_episode > 10:
+    if avgR > 90 and n_episode > 10:
         break
 
 # 儲存 model 參數

@@ -57,7 +57,7 @@ class DDPG:
         if not self.actorCriticEval.training:
             return self.get_exploitation_action(state)
 
-        if n % 5 == 0:
+        if n % 50 == 0:
             # validate every 5th episode
             action = self.get_exploitation_action(state)
         else:
@@ -99,7 +99,7 @@ class DDPG:
 
         a = self.actorCriticEval.action(s)
         qVal = self.actorCriticEval.qValue(s, a)
-        loss = -qVal.sum()
+        loss = -qVal.mean()
 
         self.optimizerActor.zero_grad()
         loss.backward(retain_graph=True)
@@ -129,8 +129,9 @@ class DDPG:
         target = val.detach()
         predict = torch.squeeze(self.actorCriticEval.qValue(s, a))
 
+        loss_fn = torch.nn.MSELoss(reduction="sum")
         self.optimizerCritic.zero_grad()
-        loss = F.smooth_l1_loss(target, predict)
+        loss = loss_fn(target, predict)
         loss.backward()
         # 梯度裁剪，以免爆炸
         # torch.nn.utils.clip_grad_norm(actor_network.parameters(),0.5)
@@ -154,10 +155,10 @@ class ActorNet(torch.nn.Module):
         super(ActorNet, self).__init__()
         self.action_lim = action_lim
         # 定義每層用什麼樣的形式
-        self.fc1 = torch.nn.Linear(n_features, 256)
-        self.fc2 = torch.nn.Linear(256, 128)
-        self.fc3 = torch.nn.Linear(128, 64)
-        self.fc4 = torch.nn.Linear(64, n_actions)
+        self.fc1 = torch.nn.Linear(n_features, 20)
+        self.fc2 = torch.nn.Linear(20, 10)
+        self.fc3 = torch.nn.Linear(10, 5)
+        self.fc4 = torch.nn.Linear(5, n_actions)
 
     def forward(self, state):
         x = F.relu(self.fc1(state))

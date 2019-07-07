@@ -96,14 +96,14 @@ class A2C:
         s = torch.FloatTensor(batch.state)
         a = torch.FloatTensor(batch.action)
         r = torch.FloatTensor(batch.reward)
-        # done = torch.FloatTensor(batch.done)
+        done = torch.FloatTensor(batch.done)
         s_ = torch.FloatTensor(batch.next_state)
 
         mean, std = self.actorCriticTarget.action(s_)
         a_ = torch.normal(mean, std) * self.n_actionRange[:, 0]
 
         futureVal = torch.squeeze(self.actorCriticTarget.qValue(s_, a_))
-        val = r + self.gamma * futureVal
+        val = r + self.gamma * futureVal * (1 - done)
         target = val.detach()
         predict = torch.squeeze(self.actorCriticEval.qValue(s, a))
 
