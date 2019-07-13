@@ -7,7 +7,7 @@ import numpy as np
 
 RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("CartPole-v0")
+env = gym.make("CartPole-v1")
 env.seed(1)  # 固定隨機種子 for 再現性
 # env = env.unwrapped  # 不限定 episode
 
@@ -20,10 +20,10 @@ print("observartions low", env.observation_space.low)
 
 agent = DDPG(
     n_actions=1,
-    n_actionRange=(env.action_space.n - 1, 0),
+    n_actionRange=((env.action_space.n - 1) / 5, 0),
     n_features=env.observation_space.shape[0],
-    learning_rate=0.001,
-    gamma=0.99,
+    learning_rate=0.0001,
+    gamma=0.999,
     tau=0.01,
     mSize=10000,
     batchSize=100,
@@ -49,6 +49,7 @@ def plot_durations():
     plt.pause(0.001)  # pause a bit so that plots are updated
 
 
+maxR = float("-inf")
 for n_episode in range(3000):
     state = env.reset()
     sumR = 0
@@ -77,14 +78,14 @@ for n_episode in range(3000):
         plot_durations()
 
     avgR = sum(reward_history[:-11:-1]) / 10
+    if avgR > maxR:
+        maxR = avgR
     print(
-        "episode: {:4d} duration: {:4d} Reward: {:5.1f} avgR: {:5.1f}".format(
-            n_episode, t, sumR, avgR
-        )
+        f"episode: {n_episode:4d}\tduration: {t:4d}\tReward: {sumR:5.1f}\tavgR: {avgR:5.1f}\tmaxR: {maxR:5.1f}"
     )
 
     # 訓練成功條件
-    if avgR == 200 and n_episode > 10:
+    if avgR >= 500 and n_episode > 10:
         break
 
 # 儲存 model 參數

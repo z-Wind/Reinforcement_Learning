@@ -6,7 +6,7 @@ import numpy as np
 
 RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("CartPole-v0")
+env = gym.make("CartPole-v1")
 
 print(env.action_space)
 print(env.observation_space)
@@ -15,10 +15,10 @@ print(env.observation_space.low)
 
 agent = DDPG(
     n_actions=1,
-    n_actionRange=(env.action_space.n - 1, 0),
+    n_actionRange=((env.action_space.n - 1) / 5, 0),
     n_features=env.observation_space.shape[0],
-    learning_rate=0.001,
-    gamma=0.99,
+    learning_rate=0.0001,
+    gamma=0.999,
     tau=0.01,
     mSize=10000,
     batchSize=100,

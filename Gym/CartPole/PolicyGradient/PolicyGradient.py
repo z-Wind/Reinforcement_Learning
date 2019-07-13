@@ -29,7 +29,7 @@ class PolicyGradient:
 
         m = Categorical(probs)
         action = m.sample()
-        
+
         log_prob = m.log_prob(action)
         self.saved_log_probs.append(log_prob)
         # 也可自定，但因計算誤差，需調整 learning rate 才能學到東西

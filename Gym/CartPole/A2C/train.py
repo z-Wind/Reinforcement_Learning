@@ -76,7 +76,7 @@ for n_episode in range(3000):
     )
 
     # 訓練成功條件
-    if avgR == 500 and n_episode > 10:
+    if avgR >= 500 and n_episode > 10:
         break
 
 # 儲存 model 參數

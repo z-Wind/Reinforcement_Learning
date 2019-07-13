@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch.distributions import Normal
 from torchvision import transforms
-from utils import MemoryDataset, OrnsteinUhlenbeckActionNoise
+from utils import MemoryDataset, OrnsteinUhlenbeckNoise
 from collections import namedtuple
 import numpy as np
 
@@ -41,7 +41,7 @@ class DDPG:
         self.gamma = gamma
         self.tau = tau
 
-        self.noise = OrnsteinUhlenbeckActionNoise(n_actions)
+        self.noise = OrnsteinUhlenbeckNoise(n_actions)
 
         # optimizer 是訓練的工具
         # 傳入 net 的所有參數, 學習率
@@ -73,7 +73,7 @@ class DDPG:
 
     def get_exploration_action(self, state):
         action = self.actorCriticEval.action(state)
-        noise = self.noise.sample() * self.max_action
+        noise = self.noise() * self.max_action
 
         action = action + torch.from_numpy(noise).float()
 
