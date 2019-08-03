@@ -14,6 +14,7 @@ Trajectory = namedtuple(
 class A2C:
     def __init__(
         self,
+        device,
         n_actions,
         n_actionRange,
         n_features,
@@ -23,9 +24,11 @@ class A2C:
         mSize=10000,
         batchSize=200,
     ):
+        self.device = device
         self.n_actionRange = torch.tensor(list(n_actionRange))
-        self.actorCriticEval = ActorCriticNet(n_actions, n_features)
-        self.actorCriticTarget = ActorCriticNet(n_actions, n_features)
+        self.actorCriticEval = ActorCriticNet(n_actions, n_features).to(self.device)
+        self.actorCriticTarget = ActorCriticNet(n_actions, n_features).to(self.device)
+        print(self.device)
         print(self.actorCriticEval)
         print(self.actorCriticTarget)
         print("max action range:", self.n_actionRange[:, 0])
@@ -48,13 +51,13 @@ class A2C:
         )
 
     def choose_action(self, state):
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().to(self.device)
         mean, std = self.actorCriticEval.action(state)
         # print(mean, std)
         action = torch.normal(mean, std)
-        action = action * self.n_actionRange[:, 0]
+        action = action * self.n_actionRange[:, 0].to(self.device)
 
-        return action.detach().numpy()
+        return action.cpu().detach().numpy()
 
     def store_trajectory(self, s, a, r, done, s_):
         self.memory.add(s, a, r, done, s_)
@@ -66,7 +69,7 @@ class A2C:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state)
+        s = torch.FloatTensor(batch.state).to(self.device)
         # a = torch.FloatTensor(batch.action)
         # r = torch.unsqueeze(torch.FloatTensor(batch.reward), dim=1)
         # done = torch.FloatTensor(batch.done)
@@ -93,14 +96,14 @@ class A2C:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state)
-        a = torch.FloatTensor(batch.action)
-        r = torch.FloatTensor(batch.reward)
-        done = torch.FloatTensor(batch.done)
-        s_ = torch.FloatTensor(batch.next_state)
+        s = torch.FloatTensor(batch.state).to(self.device)
+        a = torch.FloatTensor(batch.action).to(self.device)
+        r = torch.FloatTensor(batch.reward).to(self.device)
+        done = torch.FloatTensor(batch.done).to(self.device)
+        s_ = torch.FloatTensor(batch.next_state).to(self.device)
 
         mean, std = self.actorCriticTarget.action(s_)
-        a_ = torch.normal(mean, std) * self.n_actionRange[:, 0]
+        a_ = torch.normal(mean, std) * self.n_actionRange[:, 0].to(self.device)
 
         futureVal = torch.squeeze(self.actorCriticTarget.qValue(s_, a_))
         val = r + self.gamma * futureVal * (1 - done)

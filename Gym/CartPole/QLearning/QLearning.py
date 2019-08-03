@@ -33,10 +33,12 @@ class ReplayMemory(object):
 
 
 class QLearning:
-    def __init__(self, n_features, n_actions, learning_rate=0.01, gamma=0.9):
+    def __init__(self, device, n_features, n_actions, learning_rate=0.01, gamma=0.9):
+        self.device = device
         self.n_actions = n_actions
         self.n_features = n_features
-        self.net = Net(n_features, n_actions)
+        self.net = Net(n_features, n_actions).to(self.device)
+        print(self.device)
         print(self.net)
 
         self.lr = learning_rate
@@ -54,7 +56,7 @@ class QLearning:
         self.BATCH_SIZE = 50
 
     def choose_action(self, state):
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().to(self.device)
         value = self.net(state)
         action_max_value, action = torch.max(value, 0)
 
@@ -74,16 +76,16 @@ class QLearning:
         batch = Trajectory(*zip(*trajectories))
 
         s = batch.state
-        s = torch.tensor(s).float()
+        s = torch.tensor(s).float().to(self.device)
         a = batch.action
         a = torch.tensor(a).long()
-        a = torch.unsqueeze(a, 1)  # 在 dim=1 增加維度 ex: (50,) => (50,1)
+        a = torch.unsqueeze(a, 1).to(self.device)  # 在 dim=1 增加維度 ex: (50,) => (50,1)
         r = batch.reward
-        r = torch.tensor(r).float()
+        r = torch.tensor(r).float().to(self.device)
         done = batch.done
-        done = torch.tensor(done).float()
+        done = torch.tensor(done).float().to(self.device)
         s_ = batch.next_state
-        s_ = torch.tensor(s_).float()
+        s_ = torch.tensor(s_).float().to(self.device)
 
         # 在 dim=1，以 a 為 index 取值
         qValue = self.net(s).gather(1, a).squeeze(1)

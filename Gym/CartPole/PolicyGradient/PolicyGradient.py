@@ -6,8 +6,10 @@ torch.manual_seed(500)  # 固定隨機種子 for 再現性
 
 
 class PolicyGradient:
-    def __init__(self, n_features, n_actions, learning_rate=0.01):
-        self.net = Net(n_features, n_actions)
+    def __init__(self, device, n_features, n_actions, learning_rate=0.01):
+        self.device = device
+        self.net = Net(n_features, n_actions).to(self.device)
+        print(self.device)
         print(self.net)
 
         self.lr = learning_rate
@@ -24,7 +26,7 @@ class PolicyGradient:
         self.eps = np.finfo(np.float32).eps.item()
 
     def choose_action(self, state):
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().to(self.device)
         probs = self.net(state)
 
         m = Categorical(probs)

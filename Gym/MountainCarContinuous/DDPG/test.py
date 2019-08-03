@@ -2,6 +2,7 @@ import gym
 from DDPG import DDPG
 import matplotlib.pyplot as plt
 import torch
+import os
 
 RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
@@ -12,14 +13,24 @@ print(env.observation_space)
 print(env.observation_space.high)
 print(env.observation_space.low)
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 agent = DDPG(
+    device=device,
     n_actions=env.action_space.shape[0],
     n_actionRange=zip(env.action_space.high, env.action_space.low),
     n_features=env.observation_space.shape[0],
     learning_rate=0.01,
     gamma=0.9,
 )
-agent.actorCriticEval.load_state_dict(torch.load("params.pkl"))
+
+_dirPath = os.path.dirname(os.path.realpath(__file__))
+_dir = os.path.basename(_dirPath)
+paramsPath = os.path.join(
+    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl"
+)
+
+agent.actorCriticEval.load_state_dict(torch.load(paramsPath, map_location=device))
 agent.actorCriticEval.eval()
 
 reward_history = []

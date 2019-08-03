@@ -1,10 +1,7 @@
 import torch
 import torch.nn.functional as F
-from torch.distributions import Normal
-from torchvision import transforms
 from utils import MemoryDataset, OrnsteinUhlenbeckNoise
 from collections import namedtuple
-import numpy as np
 
 torch.manual_seed(500)  # 固定隨機種子 for 再現性
 
@@ -16,6 +13,7 @@ Trajectory = namedtuple(
 class DDPG:
     def __init__(
         self,
+        device,
         n_actions,
         n_actionRange,
         n_features,
@@ -26,10 +24,12 @@ class DDPG:
         batchSize=200,
         transforms=None,
     ):
+        self.device = device
         self.max_action = n_actionRange[0]
 
-        self.actorCriticEval = ActorCriticNet(n_actions, n_features)
-        self.actorCriticTarget = ActorCriticNet(n_actions, n_features)
+        self.actorCriticEval = ActorCriticNet(n_actions, n_features).to(self.device)
+        self.actorCriticTarget = ActorCriticNet(n_actions, n_features).to(self.device)
+        print(self.device)
         print(self.actorCriticEval)
         print(self.actorCriticTarget)
 
@@ -56,7 +56,7 @@ class DDPG:
         )
 
     def choose_action(self, state, n=0):
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().to(self.device)
 
         if not self.actorCriticEval.training:
             action = self.get_exploitation_action(state)
@@ -67,7 +67,7 @@ class DDPG:
             # get action based on observation, use exploration policy here
             action = self.get_exploration_action(state)
 
-        return action.data.numpy()
+        return action.cpu().data.numpy()
 
     def get_exploitation_action(self, state):
         action = self.actorCriticEval.action(state)
@@ -78,7 +78,7 @@ class DDPG:
         action = self.actorCriticEval.action(state)
         noise = self.noise() * self.max_action
 
-        action = action + torch.from_numpy(noise).float()
+        action = action + torch.from_numpy(noise).float().to(self.device)
 
         return action
 
@@ -92,7 +92,7 @@ class DDPG:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state)
+        s = torch.FloatTensor(batch.state).to(self.device)
         # a = torch.FloatTensor(batch.action)
         # r = torch.unsqueeze(torch.FloatTensor(batch.reward), dim=1)
         # done = torch.FloatTensor(batch.done)
@@ -117,11 +117,11 @@ class DDPG:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state)
-        a = torch.FloatTensor(batch.action)
-        r = torch.FloatTensor(batch.reward)
-        done = torch.FloatTensor(batch.done)
-        s_ = torch.FloatTensor(batch.next_state)
+        s = torch.FloatTensor(batch.state).to(self.device)
+        a = torch.FloatTensor(batch.action).to(self.device)
+        r = torch.FloatTensor(batch.reward).to(self.device)
+        done = torch.FloatTensor(batch.done).to(self.device)
+        s_ = torch.FloatTensor(batch.next_state).to(self.device)
 
         a_ = self.actorCriticTarget.action(s_)
 

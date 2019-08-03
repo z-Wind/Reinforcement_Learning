@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from torch.distributions import Normal
 from utils import MemoryDataset, OrnsteinUhlenbeckNoise
 from collections import namedtuple
 
@@ -14,6 +13,7 @@ Trajectory = namedtuple(
 class DDPG:
     def __init__(
         self,
+        device,
         n_actions,
         n_actionRange,
         n_features,
@@ -23,13 +23,15 @@ class DDPG:
         mSize=10000,
         batchSize=200,
     ):
+        self.device = device
         self.n_actionRange = torch.tensor(list(n_actionRange))
         self.actorCriticEval = ActorCriticNet(
-            n_actions, n_features, self.n_actionRange[:, 0]
-        )
+            n_actions, n_features, self.n_actionRange[:, 0].to(self.device)
+        ).to(self.device)
         self.actorCriticTarget = ActorCriticNet(
-            n_actions, n_features, self.n_actionRange[:, 0]
-        )
+            n_actions, n_features, self.n_actionRange[:, 0].to(self.device)
+        ).to(self.device)
+        print(self.device)
         print(self.actorCriticEval)
         print(self.actorCriticTarget)
         print("max action range:", self.n_actionRange[:, 0])
@@ -54,8 +56,10 @@ class DDPG:
         )
 
     def choose_action(self, state, n=0):
+        state = torch.from_numpy(state).float().to(self.device)
+
         if not self.actorCriticEval.training:
-            return self.get_exploitation_action(state)
+            action = self.get_exploitation_action(state)
 
         if n % 5 == 0:
             # validate every 5th episode
@@ -64,20 +68,18 @@ class DDPG:
             # get action based on observation, use exploration policy here
             action = self.get_exploration_action(state)
 
-        return action
+        return action.cpu().data.numpy()
 
     def get_exploitation_action(self, state):
-        state = torch.from_numpy(state).float()
         action = self.actorCriticEval.action(state)
 
-        return action.data.numpy()
+        return action
 
     def get_exploration_action(self, state):
-        state = torch.from_numpy(state).float()
         action = self.actorCriticEval.action(state)
-        action = action.data.numpy() + (
-            self.noise() * self.n_actionRange[:, 0].data.numpy()
-        )
+        noise = self.noise() * self.n_actionRange[:, 0].data.numpy()
+
+        action = action + torch.FloatTensor(noise).to(self.device)
 
         return action
 
@@ -91,7 +93,7 @@ class DDPG:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state)
+        s = torch.FloatTensor(batch.state).to(self.device)
         # a = torch.FloatTensor(batch.action)
         # r = torch.unsqueeze(torch.FloatTensor(batch.reward), dim=1)
         # done = torch.FloatTensor(batch.done)
@@ -116,11 +118,11 @@ class DDPG:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state)
-        a = torch.FloatTensor(batch.action)
-        r = torch.FloatTensor(batch.reward)
-        done = torch.FloatTensor(batch.done)
-        s_ = torch.FloatTensor(batch.next_state)
+        s = torch.FloatTensor(batch.state).to(self.device)
+        a = torch.FloatTensor(batch.action).to(self.device)
+        r = torch.FloatTensor(batch.reward).to(self.device)
+        done = torch.FloatTensor(batch.done).to(self.device)
+        s_ = torch.FloatTensor(batch.next_state).to(self.device)
 
         a_ = self.actorCriticTarget.action(s_)
 
@@ -210,6 +212,7 @@ class ActorCriticNet(torch.nn.Module):
 
     def action(self, x):
         action = self.actor(x)
+
         return action
 
     def qValue(self, x, a):

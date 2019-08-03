@@ -6,9 +6,11 @@ torch.manual_seed(500)  # 固定隨機種子 for 再現性
 
 
 class A2C:
-    def __init__(self, n_actions, n_features, learning_rate=0.01, gamma=0.9):
-        self.actorCriticEval = ActorCriticNet(n_actions, n_features)
-        self.actorCriticTarget = ActorCriticNet(n_actions, n_features)
+    def __init__(self, device, n_actions, n_features, learning_rate=0.01, gamma=0.9):
+        self.device = device
+        self.actorCriticEval = ActorCriticNet(n_actions, n_features).to(self.device)
+        self.actorCriticTarget = ActorCriticNet(n_actions, n_features).to(self.device)
+        print(self.device)
         print(self.actorCriticEval)
         print(self.actorCriticTarget)
 
@@ -27,7 +29,7 @@ class A2C:
         self.states = []
 
     def choose_action(self, state):
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().to(self.device)
         probs, _ = self.actorCriticEval(state)
 
         m = Categorical(probs)
@@ -54,8 +56,10 @@ class A2C:
         # 若是看直接看 total reward 不太能區分出 action 的好壞，導致學習不好
         nextStates = self.states + [self.nextState]
         for r, s, s_ in zip(self.rewards[::-1], self.states[::-1], nextStates[::-1]):
-            _, futureVal = self.actorCriticTarget(torch.tensor(s_).float())
-            _, nowVal = self.actorCriticTarget(torch.tensor(s).float())
+            _, futureVal = self.actorCriticTarget(
+                torch.tensor(s_).float().to(self.device)
+            )
+            _, nowVal = self.actorCriticTarget(torch.tensor(s).float().to(self.device))
             R_now = r + futureVal.detach() - nowVal.detach()
             R = R_now + self.gamma * R
             rewards.insert(0, R)
@@ -81,10 +85,14 @@ class A2C:
     def trainCriticTD(self):
         r = self.rewards[-1]
 
-        _, futureVal = self.actorCriticTarget(torch.tensor(self.nextState).float())
+        _, futureVal = self.actorCriticTarget(
+            torch.tensor(self.nextState).float().to(self.device)
+        )
         val = r + futureVal
         target = val.detach()
-        _, predict = self.actorCriticEval(torch.tensor(self.states[-1]).float())
+        _, predict = self.actorCriticEval(
+            torch.tensor(self.states[-1]).float().to(self.device)
+        )
         # print(predict, futureVal)
 
         self.optimizerActorCriticEval.zero_grad()
@@ -104,7 +112,7 @@ class A2C:
             R = r + R
             target = torch.tensor(R).float()
 
-            _, predict = self.actorCriticEval(torch.tensor(s).float())
+            _, predict = self.actorCriticEval(torch.tensor(s).float().to(self.device))
 
             self.optimizerActorCriticEval.zero_grad()
             lossFun = torch.nn.MSELoss()
