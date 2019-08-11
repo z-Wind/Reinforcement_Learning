@@ -1,5 +1,5 @@
 import gym
-from A2C import A2C
+from .A2C import A2C
 import matplotlib.pyplot as plt
 import torch
 import os
@@ -27,7 +27,7 @@ agent = A2C(
 _dirPath = os.path.dirname(os.path.realpath(__file__))
 _dir = os.path.basename(_dirPath)
 paramsPath = os.path.join(
-    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl"
+    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl.best"
 )
 
 agent.actorCriticEval.load_state_dict(torch.load(paramsPath, map_location=device))

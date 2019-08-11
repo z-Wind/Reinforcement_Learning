@@ -110,7 +110,7 @@ class A2C:
 
         for r, s in zip(self.rewards[::-1], self.states[::-1]):
             R = r + R
-            target = torch.tensor(R).float()
+            target = torch.tensor([R]).float()
 
             _, predict = self.actorCriticEval(torch.tensor(s).float().to(self.device))
 
@@ -149,7 +149,7 @@ class ActorCriticNet(torch.nn.Module):
         # 正向傳播輸入值, 神經網絡分析出輸出值
         x_a = self.fc1(x)
         x_a = F.relu6(x_a)
-        action = F.softmax(self.fc2(x_a))
+        action = F.softmax(self.fc2(x_a), dim=0)
 
         x_v = self.fc3(x)
         x_v = F.relu6(x_v)

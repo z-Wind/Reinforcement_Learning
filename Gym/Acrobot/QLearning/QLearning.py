@@ -79,16 +79,18 @@ class QLearning:
         trajectories = self.trajectories.sample(self.BATCH_SIZE)
         batch = Trajectory(*zip(*trajectories))
 
-        s = batch.state
+        # 轉成 np.array 加快轉換速度
+        s = np.array(batch.state)
+        a = np.array(batch.action)
+        r = np.array(batch.reward)
+        done = np.array(batch.done)
+        s_ = np.array(batch.next_state)
+
         s = torch.tensor(s).float().to(self.device)
-        a = batch.action
         a = torch.tensor(a).long().to(self.device)
         a = torch.unsqueeze(a, 1)  # 在 dim=1 增加維度 ex: (50,) => (50,1)
-        r = batch.reward
         r = torch.tensor(r).float().to(self.device)
-        done = batch.done
         done = torch.tensor(done).float().to(self.device)
-        s_ = batch.next_state
         s_ = torch.tensor(s_).float().to(self.device)
 
         # 在 dim=1，以 a 為 index 取值

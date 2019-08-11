@@ -1,15 +1,16 @@
 import gym
-from DDPG import DDPG
+from .DDPG import DDPG
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 import numpy as np
 import os
+from .atari_wrappers import wrap_env
 
 
 RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("Pong-v0")
+env = wrap_env(gym.make("PongDeterministic-v4"))
 env.seed(1)  # 固定隨機種子 for 再現性
 # env = env.unwrapped  # 不限定 episode
 
@@ -17,29 +18,29 @@ print("actions", env.action_space)
 # print("actions high", env.action_space.high)
 # print("actions low", env.action_space.low)
 print("observartions", env.observation_space)
-print("observartions high", env.observation_space.high)
-print("observartions low", env.observation_space.low)
+# print("observartions high", env.observation_space.high)
+# print("observartions low", env.observation_space.low)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-data_transform = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[128, 128, 128], std=[128, 128, 128]),
-    ]
-)
+# data_transform = transforms.Compose(
+#     [
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+#     ]
+# )
 agent = DDPG(
     device=device,
     n_actions=env.action_space.n,
-    n_actionRange=(env.action_space.n, 0),
-    n_features=10,
+    n_actionRange=(1, 0),
+    n_features=256,
     img_shape=env.observation_space.shape,
     learning_rate=0.001,
-    gamma=0.999,
+    gamma=0.99,
     tau=0.01,
-    mSize=10000,
+    mSize=1_000_000,
     batchSize=100,
-    transforms=data_transform,
+    # transforms=data_transform,
 )
 
 _dirPath = os.path.dirname(os.path.realpath(__file__))
@@ -50,7 +51,9 @@ paramsPath = os.path.join(
 
 if os.path.exists(paramsPath):
     agent.actorCriticEval.load_state_dict(torch.load(paramsPath, map_location=device))
+    agent.actorCriticTarget.load_state_dict(torch.load(paramsPath, map_location=device))
     agent.actorCriticEval.train()
+
 
 reward_history = []
 
@@ -111,9 +114,8 @@ for n_episode in range(3000):
     if avgR > 20 and n_episode > 10:
         break
 
-    if n_episode % 5 == 0:
-        # 儲存 model 參數
-        torch.save(agent.actorCriticEval.state_dict(), paramsPath)
+    # 儲存 model 參數
+    torch.save(agent.actorCriticEval.state_dict(), paramsPath)
 
-# 儲存 model 參數
-torch.save(agent.actorCriticEval.state_dict(), paramsPath)
+# 儲存最佳 model 參數
+torch.save(agent.actorCriticEval.state_dict(), paramsPath + ".best")

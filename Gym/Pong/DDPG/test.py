@@ -1,14 +1,15 @@
 import gym
-from DDPG import DDPG
+from .DDPG import DDPG
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 import os
 import numpy as np
+from .atari_wrappers import wrap_env
 
 RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("Pong-v0")
+env = wrap_env(gym.make("PongDeterministic-v4"))
 
 print(env.action_space)
 print(env.observation_space)
@@ -27,22 +28,22 @@ data_transform = transforms.Compose(
 agent = DDPG(
     device=device,
     n_actions=env.action_space.n,
-    n_actionRange=(0.2, 0),
-    n_features=10,
+    n_actionRange=(1, 0),
+    n_features=256,
     img_shape=env.observation_space.shape,
     learning_rate=0.001,
-    gamma=0.999,
+    gamma=0.99,
     tau=0.01,
-    mSize=10000,
+    mSize=1_000_000,
     batchSize=100,
-    transforms=data_transform,
+    # transforms=data_transform,
 )
 
 _dir = os.path.dirname(os.path.realpath(__file__))
 _dirPath = os.path.dirname(os.path.realpath(__file__))
 _dir = os.path.basename(_dirPath)
 paramsPath = os.path.join(
-    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl"
+    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl.best"
 )
 
 agent.actorCriticEval.load_state_dict(torch.load(paramsPath, map_location=device))

@@ -1,5 +1,5 @@
 import gym
-from PolicyGradient import PolicyGradient
+from .PolicyGradient import PolicyGradient
 import matplotlib.pyplot as plt
 import torch
 import os
@@ -25,7 +25,7 @@ agent = PolicyGradient(
 _dirPath = os.path.dirname(os.path.realpath(__file__))
 _dir = os.path.basename(_dirPath)
 paramsPath = os.path.join(
-    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl"
+    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl.best"
 )
 
 agent.net.load_state_dict(torch.load(paramsPath, map_location=device))

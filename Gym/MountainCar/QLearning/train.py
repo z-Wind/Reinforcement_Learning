@@ -1,5 +1,5 @@
 import gym
-from QLearning import QLearning
+from .QLearning import QLearning
 import matplotlib.pyplot as plt
 import torch
 import os
@@ -93,5 +93,5 @@ for n_episode in range(3000):
     # 儲存 model 參數
     torch.save(agent.net.state_dict(), paramsPath)
 
-# 儲存 model 參數
-torch.save(agent.net.state_dict(), paramsPath)
+# 儲存最佳 model 參數
+torch.save(agent.net.state_dict(), paramsPath + ".best")

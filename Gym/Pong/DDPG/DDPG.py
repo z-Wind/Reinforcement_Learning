@@ -1,7 +1,8 @@
 import torch
 import torch.nn.functional as F
-from utils import MemoryDataset, OrnsteinUhlenbeckNoise
+from .utils import MemoryDataset, OrnsteinUhlenbeckNoise
 from collections import namedtuple
+import numpy as np
 
 torch.manual_seed(500)  # 固定隨機種子 for 再現性
 
@@ -21,7 +22,7 @@ class DDPG:
         learning_rate=0.01,
         gamma=0.9,
         tau=0.001,
-        mSize=10000,
+        mSize=1000000,
         batchSize=200,
         transforms=None,
     ):
@@ -68,12 +69,14 @@ class DDPG:
         )
 
     def choose_action(self, state, n=0):
-        state = torch.unsqueeze(self.transforms(state), dim=0).to(self.device)
+        # state = torch.unsqueeze(self.transforms(state), dim=0).to(self.device)
+        state = torch.FloatTensor(state)
+        state = torch.unsqueeze(state, dim=0).to(self.device)
 
         if not self.actorCriticEval.training:
             action = self.get_exploitation_action(state)
-        elif n % 2 == 0:
-            # validate every 5th episode
+        elif n % 100 == 0:
+            # validate every nth episode
             action = self.get_exploitation_action(state)
         else:
             # get action based on observation, use exploration policy here
@@ -104,8 +107,16 @@ class DDPG:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = [self.transforms(s) for s in batch.state]
-        s = torch.stack(s).to(self.device)
+        # 轉成 np.array 加快轉換速度
+        s = np.array(batch.state)
+        # a = np.array(batch.action)
+        # r = np.array(batch.reward)
+        # done = np.array(batch.done)
+        # s_ = np.array(batch.next_state)
+
+        # s = [self.transforms(s) for s in batch.state]
+        # s = torch.stack(s).to(self.device)
+        s = torch.FloatTensor(s).to(self.device)
         # a = torch.FloatTensor(batch.action)
         # a = torch.squeeze(a, dim=1)
         # r = torch.FloatTensor(batch.reward)
@@ -133,14 +144,23 @@ class DDPG:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = [self.transforms(s) for s in batch.state]
-        s = torch.stack(s).to(self.device)
-        a = torch.FloatTensor(batch.action)
+        # 轉成 np.array 加快轉換速度
+        s = np.array(batch.state)
+        a = np.array(batch.action)
+        r = np.array(batch.reward)
+        done = np.array(batch.done)
+        s_ = np.array(batch.next_state)
+
+        # s = [self.transforms(s) for s in batch.state]
+        # s = torch.stack(s).to(self.device)
+        s = torch.FloatTensor(s).to(self.device)
+        a = torch.FloatTensor(a)
         a = torch.squeeze(a, dim=1).to(self.device)
-        r = torch.FloatTensor(batch.reward).to(self.device)
-        done = torch.FloatTensor(batch.done).to(self.device)
-        s_ = [self.transforms(s) for s in batch.next_state]
-        s_ = torch.stack(s_).to(self.device)
+        r = torch.FloatTensor(r).to(self.device)
+        done = torch.FloatTensor(done).to(self.device)
+        # s_ = [self.transforms(s) for s in batch.next_state]
+        # s_ = torch.stack(s_).to(self.device)
+        s_ = torch.FloatTensor(s_).to(self.device)
 
         a_ = self.actorCriticTarget.action(s_)
 
@@ -170,6 +190,52 @@ class DDPG:
                 paramTarget.data - paramEval.data
             )
 
+    def teach(self):
+        if len(self.memory) < self.batchSize * 10:
+            return None
+
+        batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
+
+        # 轉成 np.array 加快轉換速度
+        s = np.array(batch.state)
+        a = np.array(batch.action)
+        r = np.array(batch.reward)
+        done = np.array(batch.done)
+        s_ = np.array(batch.next_state)
+
+        s = torch.FloatTensor(s).to(self.device)
+        a = torch.FloatTensor(a)
+        a = torch.squeeze(a, dim=1).to(self.device)
+        r = torch.FloatTensor(r).to(self.device)
+        done = torch.FloatTensor(done).to(self.device)
+        s_ = torch.FloatTensor(s_).to(self.device)
+
+        # Critic
+        a_ = self.actorCriticTarget.action(s_)
+
+        futureVal = torch.squeeze(self.actorCriticTarget.qValue(s_, a_))
+        val = r + self.gamma * futureVal * (1 - done)
+        target = val.detach()
+        predict = torch.squeeze(self.actorCriticEval.qValue(s, a))
+
+        loss_fn = torch.nn.MSELoss(reduction="sum")
+        self.optimizerCritic.zero_grad()
+        lossC = loss_fn(target, predict)
+        lossC.backward()
+        self.optimizerCritic.step()
+
+        # Actor
+        action = self.actorCriticEval.action(s)
+        loss_fn = torch.nn.MSELoss()
+        self.optimizerActor.zero_grad()
+        lossA = loss_fn(a, action)
+        lossA.backward()
+        self.optimizerActor.step()
+
+        loss = lossC + lossA
+
+        return loss.item()
+
 
 class ActorNet(torch.nn.Module):
     def __init__(self, n_actions, n_features):
@@ -189,13 +255,13 @@ class CriticNet(torch.nn.Module):
     def __init__(self, n_actions, n_features):
         super(CriticNet, self).__init__()
         # 定義每層用什麼樣的形式
-        self.fcVal1_s = torch.nn.Linear(n_features, 1024)
-        self.fcVal2_s = torch.nn.Linear(1024, 512)
+        self.fcVal1_s = torch.nn.Linear(n_features, 256)
+        self.fcVal2_s = torch.nn.Linear(256, 128)
 
-        self.fcVal1_a = torch.nn.Linear(n_actions, 512)
+        self.fcVal1_a = torch.nn.Linear(n_actions, 128)
 
-        self.fcVal1 = torch.nn.Linear(1024, 512)
-        self.fcVal2 = torch.nn.Linear(512, 1)
+        self.fcVal1 = torch.nn.Linear(256, 128)
+        self.fcVal2 = torch.nn.Linear(128, 1)
 
     def forward(self, x, a):  # 這同時也是 Module 中的 forward 功能
         # 正向傳播輸入值, 神經網絡分析出輸出值
@@ -218,38 +284,58 @@ class CNN(torch.nn.Module):
         h = img_shape[0]
         w = img_shape[1]
 
-        self.conv1 = torch.nn.Conv2d(in_channels, 32, 5)  # 32 x h-2 x w-2
-        h -= 4
-        w -= 4
+        kernel_size = 8
+        stride = 4
+        padding = 0
+        self.conv1 = torch.nn.Conv2d(
+            in_channels, 32, kernel_size=kernel_size, stride=stride, padding=padding
+        )
+        h = (h + padding * 2 - kernel_size) // stride + 1
+        w = (w + padding * 2 - kernel_size) // stride + 1
 
-        self.pool1 = torch.nn.MaxPool2d(2)  # 32 x (h-2)//2 x (w-2)//2
-        h //= 2
-        w //= 2
+        # self.pool1 = torch.nn.MaxPool2d(2)  # 32 x (h-2)//2 x (w-2)//2
+        # h //= 2
+        # w //= 2
 
-        self.conv2 = torch.nn.Conv2d(32, 64, 5)  # 64 x (h-2)//2-2 x (w-2)//2-2
-        h -= 4
-        w -= 4
+        kernel_size = 4
+        stride = 2
+        padding = 0
+        self.conv2 = torch.nn.Conv2d(
+            32, 64, kernel_size=kernel_size, stride=stride, padding=padding
+        )
+        h = (h + padding * 2 - kernel_size) // stride + 1
+        w = (w + padding * 2 - kernel_size) // stride + 1
 
-        self.pool2 = torch.nn.MaxPool2d(2)  # 64 x ((h-2)//2-2)//2 x ((w-2)//2-2)//2
-        h //= 2
-        w //= 2
+        # self.pool2 = torch.nn.MaxPool2d(2)  # 64 x ((h-2)//2-2)//2 x ((w-2)//2-2)//2
+        # h //= 2
+        # w //= 2
 
-        self.fc1 = torch.nn.Linear(64 * h * w, 120)
-        self.fc2 = torch.nn.Linear(120, 84)
-        self.fc3 = torch.nn.Linear(84, n_features)
+        kernel_size = 3
+        stride = 1
+        padding = 0
+        self.conv3 = torch.nn.Conv2d(
+            64, 64, kernel_size=kernel_size, stride=stride, padding=padding
+        )
+        h = (h + padding * 2 - kernel_size) // stride + 1
+        w = (w + padding * 2 - kernel_size) // stride + 1
 
-        self.dropout = torch.nn.Dropout(p=0.5)
+        self.fc1 = torch.nn.Linear(64 * h * w, 512)
+        self.fc2 = torch.nn.Linear(512, n_features)
+
+        # self.dropout = torch.nn.Dropout(p=0.5)
 
     def forward(self, x):
-        x = self.pool1(F.relu(self.conv1(x)))
-        x = self.pool2(F.relu(self.conv2(x)))
+        # x = self.pool1(F.relu(self.conv1(x)))
+        # x = self.pool2(F.relu(self.conv2(x)))
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+
         x = x.view(x.shape[0], -1)
-        x = self.dropout(x)
+        # x = self.dropout(x)
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = F.relu(self.fc2(x))
-        x = self.dropout(x)
-        x = self.fc3(x)
+        # x = self.dropout(x)
+        x = self.fc2(x)
 
         return x
 

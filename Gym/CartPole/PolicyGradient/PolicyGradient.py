@@ -82,6 +82,6 @@ class Net(torch.nn.Module):
     def forward(self, x):  # 這同時也是 Module 中的 forward 功能
         # 正向傳播輸入值, 神經網絡分析出輸出值
         model = torch.nn.Sequential(
-            self.fc1, torch.nn.ReLU(), self.fc2, torch.nn.Softmax()
+            self.fc1, torch.nn.ReLU(), self.fc2, torch.nn.Softmax(dim=0)
         )
         return model(x)

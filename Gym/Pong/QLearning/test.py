@@ -1,27 +1,28 @@
 import gym
-from QLearning import QLearning
+from .QLearning import QLearning
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 import os
+from .atari_wrappers import wrap_env
 
 RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
-env = gym.make("Pong-v0")
+env = wrap_env(gym.make("PongDeterministic-v4"))
 
 print(env.action_space)
 print(env.observation_space)
-print(env.observation_space.high)
-print(env.observation_space.low)
+# print(env.observation_space.high)
+# print(env.observation_space.low)
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-data_transform = transforms.Compose(
-    [
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[128, 128, 128], std=[128, 128, 128]),
-    ]
-)
+# data_transform = transforms.Compose(
+#    [
+#        transforms.ToTensor(),
+#        transforms.Normalize(mean=[128, 128, 128], std=[128, 128, 128]),
+#    ]
+# )
 
 agent = QLearning(
     device=device,
@@ -32,13 +33,13 @@ agent = QLearning(
     tau=0.01,
     mSize=10000,
     batchSize=100,
-    transforms=data_transform,
+    # transforms=data_transform,
 )
 
 _dirPath = os.path.dirname(os.path.realpath(__file__))
 _dir = os.path.basename(_dirPath)
 paramsPath = os.path.join(
-    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl"
+    _dirPath, f"params_{env.unwrapped.spec.id}_{_dir}_{device.type}.pkl.best"
 )
 
 agent.net.load_state_dict(torch.load(paramsPath, map_location=device))

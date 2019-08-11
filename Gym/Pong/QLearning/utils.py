@@ -2,6 +2,8 @@ import random
 import numpy as np
 from torch.utils.data import Dataset
 from collections import deque
+import cv2
+from matplotlib import pyplot as plt
 
 
 class MemoryDataset(Dataset):
@@ -79,3 +81,8 @@ class OrnsteinUhlenbeckNoise:
 
     def _delta_wiener(self):
         return np.sqrt(self.dt) * np.random.randn(self.dim)
+
+
+def imshow(img):
+    plt.imshow(img)
+    plt.show()

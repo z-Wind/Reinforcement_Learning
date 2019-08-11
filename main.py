@@ -1,16 +1,17 @@
 import subprocess
 import sys
 import time
-import os
 
 
-def run_command(args, wait=False, timeout=None):
+def run_command(args, wait=False, timeout=None, debug=False):
     try:
-        if wait:
-            p = subprocess.Popen(args)
+        if debug:
+            p = subprocess.Popen(args, stdout=subprocess.PIPE)
             time.sleep(60)
             p.kill()
-            # p.wait()
+        elif wait:
+            p = subprocess.Popen(args)
+            p.wait()
         elif timeout:
             p = subprocess.Popen(args, stdout=subprocess.PIPE)
             time.sleep(timeout)
@@ -31,30 +32,27 @@ def run_command(args, wait=False, timeout=None):
     return result
 
 
-dirList = [
-    "Gym/Acrobot/A2C",
-    "Gym/Acrobot/PolicyGradient",
-    "Gym/Acrobot/QLearning",
-    #
-    "Gym/CartPole/A2C",
-    "Gym/CartPole/DDPG",
-    "Gym/CartPole/DDPG_softmax",
-    "Gym/CartPole/PolicyGradient",
-    "Gym/CartPole/QLearning",
-    #
-    "Gym/MountainCar/QLearning",
-    "Gym/MountainCarContinuous/DDPG",
-    #
-    "Gym/Pendulum/A2C",
-    "Gym/Pendulum/DDPG",
-    #
-    "Gym/Pong/DDPG",
-    "Gym/Pong/QLearning",
-]
+allList = {
+    "Gym": {
+        "Acrobot": ["A2C", "PolicyGradient", "QLearning"],
+        "CartPole": ["A2C", "DDPG", "DDPG_softmax", "PolicyGradient", "QLearning"],
+        "MountainCar": ["QLearning"],
+        "MountainCarContinuous": ["DDPG"],
+        "Pendulum": ["A2C", "DDPG"],
+        # "Pong": ["DDPG", "QLearning"],
+    }
+}
 
-for d in dirList:
-    print("=================================================")
-    print(d)
-    print("=================================================")
-    run_command(["python", os.path.join(d, "train.py")], wait=True)
-    run_command(["python", os.path.join(d, "test.py")], timeout=10)
+debug = True
+for platform, envs in allList.items():
+    for env, methods in envs.items():
+        for method in methods:
+            package = f"{platform}.{env}.{method}"
+            print("=================================================")
+            print(package)
+            print("=================================================")
+            if debug:
+                run_command(["python", "-m", f"{package}.train"], debug=True)
+            else:
+                run_command(["python", "-m", f"{package}.train"], wait=True)
+            run_command(["python", "-m", f"{package}.test"], timeout=10)

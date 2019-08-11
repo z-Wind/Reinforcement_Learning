@@ -1,5 +1,5 @@
 import gym
-from A2C import A2C
+from .A2C import A2C
 import matplotlib.pyplot as plt
 import torch
 import os
@@ -32,7 +32,9 @@ paramsPath = os.path.join(
 )
 if os.path.exists(paramsPath):
     agent.actorCriticEval.load_state_dict(torch.load(paramsPath, map_location=device))
+    agent.actorCriticTarget.load_state_dict(torch.load(paramsPath, map_location=device))
     agent.actorCriticEval.train()
+
 
 reward_history = []
 
@@ -95,5 +97,5 @@ for n_episode in range(3000):
     # 儲存 model 參數
     torch.save(agent.actorCriticEval.state_dict(), paramsPath)
 
-# 儲存 model 參數
-torch.save(agent.actorCriticEval.state_dict(), paramsPath)
+# 儲存最佳 model 參數
+torch.save(agent.actorCriticEval.state_dict(), paramsPath + ".best")

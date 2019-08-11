@@ -1,8 +1,9 @@
 import torch
 import torch.nn.functional as F
 from torch.distributions import Normal
-from memory import MemoryDataset
+from .memory import MemoryDataset
 from collections import namedtuple
+import numpy as np
 
 torch.manual_seed(500)  # 固定隨機種子 for 再現性
 
@@ -69,7 +70,14 @@ class A2C:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state).to(self.device)
+        # 轉成 np.array 加快轉換速度
+        s = np.array(batch.state)
+        # a = np.array(batch.action)
+        # r = np.array(batch.reward)
+        # done = np.array(batch.done)
+        # s_ = np.array(batch.next_state)
+
+        s = torch.FloatTensor(s).to(self.device)
         # a = torch.FloatTensor(batch.action)
         # r = torch.unsqueeze(torch.FloatTensor(batch.reward), dim=1)
         # done = torch.FloatTensor(batch.done)
@@ -96,11 +104,18 @@ class A2C:
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
-        s = torch.FloatTensor(batch.state).to(self.device)
-        a = torch.FloatTensor(batch.action).to(self.device)
-        r = torch.FloatTensor(batch.reward).to(self.device)
-        done = torch.FloatTensor(batch.done).to(self.device)
-        s_ = torch.FloatTensor(batch.next_state).to(self.device)
+        # 轉成 np.array 加快轉換速度
+        s = np.array(batch.state)
+        a = np.array(batch.action)
+        r = np.array(batch.reward)
+        done = np.array(batch.done)
+        s_ = np.array(batch.next_state)
+
+        s = torch.FloatTensor(s).to(self.device)
+        a = torch.FloatTensor(a).to(self.device)
+        r = torch.FloatTensor(r).to(self.device)
+        done = torch.FloatTensor(done).to(self.device)
+        s_ = torch.FloatTensor(s_).to(self.device)
 
         mean, std = self.actorCriticTarget.action(s_)
         a_ = torch.normal(mean, std) * self.n_actionRange[:, 0].to(self.device)
