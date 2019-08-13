@@ -17,12 +17,15 @@ class QLearning:
         device,
         n_actions,
         img_shape,
-        learning_rate=0.01,
-        gamma=0.9,
-        tau=0.001,
+        learning_rate=0.0001,
+        gamma=0.99,
+        tau=0.0,
         epsilonStart=0,
-        mSize=1000000,
-        batchSize=200,
+        epsilonUpdateSteps=10 ** 5,
+        updateTargetFreq=10000,
+        mSize=1_000_000,
+        batchSize=32,
+        startTrainLen=100,
         transforms=None,
     ):
         self.device = device
@@ -30,28 +33,42 @@ class QLearning:
         self.img_shape = img_shape
         self.net = Net(img_shape, n_actions).to(self.device)
         self.netTarget = Net(img_shape, n_actions).to(self.device)
-        print(self.device)
+        print("device", self.device)
         print(self.net)
+        print(self.netTarget)
 
         self.lr = learning_rate
         # Q 衰減係數
         self.gamma = gamma
         self.tau = tau
+
         self.epsilon = epsilonStart
+        self.epsilonStart = epsilonStart
+        self.epsilonUpdateSteps = epsilonUpdateSteps
+
+        self.updateTargetFreq = updateTargetFreq
 
         # optimizer 是訓練的工具
         self.optimizer = torch.optim.Adam(
             self.net.parameters(), lr=self.lr
         )  # 傳入 net 的所有參數, 學習率
+        # self.optimizer = torch.optim.RMSprop(self.net.parameters(), lr=self.lr)
+
         # loss function
         self.lossFun = torch.nn.MSELoss()
 
         self.transforms = transforms
         self.memory = MemoryDataset(mSize, transforms=transforms)
         self.batchSize = batchSize
+        self.startTrainLen = startTrainLen
 
-    def decay_epsilon(self, n_episode):
-        self.epsilon = min(0.8, self.epsilon + n_episode / 200)
+        # 從 1 開始，以免 updateTarget
+        self.trainStep = 1
+
+    def decay_epsilon(self):
+        self.epsilon = min(
+            0.98, self.epsilonStart + self.trainStep / self.epsilonUpdateSteps
+        )
 
     def choose_action(self, state):
         choice = np.random.choice([0, 1], p=((1 - self.epsilon), self.epsilon))
@@ -63,8 +80,8 @@ class QLearning:
             # state = torch.unsqueeze(self.transforms(state), dim=0).to(self.device)
             state = torch.FloatTensor(state)
             state = torch.unsqueeze(state, dim=0).to(self.device)
-            value = self.net(state)
-            action_max_value, action = torch.max(value, 1)
+            qValues = self.net(state)
+            action_max_value, action = torch.max(qValues, 1)
 
         return action.item()
 
@@ -72,8 +89,9 @@ class QLearning:
         self.memory.add(s, a, r, done, s_)
 
     def train(self):
-        if len(self.memory) < self.batchSize * 10:
+        if len(self.memory) < self.startTrainLen:
             return
+        self.trainStep += 1
 
         batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
 
@@ -84,32 +102,36 @@ class QLearning:
         done = np.array(batch.done)
         s_ = np.array(batch.next_state)
 
-        # s = [self.transforms(s) for s in batch.state]
-        # s = torch.stack(s).to(self.device)
         s = torch.FloatTensor(s).to(self.device)
         a = torch.LongTensor(a)
         a = torch.unsqueeze(a, 1).to(self.device)
         r = torch.FloatTensor(r).to(self.device)
         done = torch.FloatTensor(done).to(self.device)
-        # s_ = [self.transforms(s) for s in batch.next_state]
-        # s_ = torch.stack(s_).to(self.device)
         s_ = torch.FloatTensor(s_).to(self.device)
 
         # 在 dim=1，以 a 為 index 取值
         qValue = self.net(s).gather(1, a).squeeze(1)
+
+        # caculate Target
         qNext = self.netTarget(s_).detach()  # detach from graph, don't backpropagate
         # done 是關鍵之一，不導入計算會導致 qNext 預估錯誤
         # 這也是讓 qValue 收斂的要素，不然 target 會一直往上累加，進而估不準
         target = r + self.gamma * qNext.max(1)[0] * (1 - done)
 
         self.optimizer.zero_grad()
-        loss = self.lossFun(target.detach(), qValue)
+        loss = self.lossFun(qValue, target.detach())
         loss.backward()
         # torch.nn.utils.clip_grad_norm(self.net.parameters(), 0.5)
         self.optimizer.step()
 
-    # 逐步更新 target NN
+        # print(list(self.net.parameters()))
+
+    # 逐步更新 target NN, 必須一定的訓練後，再更新
     def updateTarget(self):
+        if (self.trainStep % self.updateTargetFreq) != 0:
+            return
+
+        print(f"Update target network... tau={self.tau}")
         for paramEval, paramTarget in zip(
             self.net.parameters(), self.netTarget.parameters()
         ):
