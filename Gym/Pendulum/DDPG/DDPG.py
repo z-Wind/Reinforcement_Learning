@@ -147,7 +147,7 @@ class DDPG:
         predict = torch.squeeze(self.actorCriticEval.qValue(s, a))
 
         self.optimizerCritic.zero_grad()
-        loss = F.smooth_l1_loss(target, predict)
+        loss = F.smooth_l1_loss(predict, target)
         loss.backward()
         # 梯度裁剪，以免爆炸
         # torch.nn.utils.clip_grad_norm(actor_network.parameters(),0.5)

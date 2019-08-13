@@ -126,7 +126,7 @@ class A2C:
         predict = torch.squeeze(self.actorCriticEval.qValue(s, a))
 
         self.optimizerCritic.zero_grad()
-        loss = F.smooth_l1_loss(target, predict)
+        loss = F.smooth_l1_loss(predict, target)
         loss.backward()
         self.optimizerCritic.step()
 

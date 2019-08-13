@@ -97,7 +97,7 @@ class QLearning:
         target = r + self.gamma * qNext.max(1)[0] * (1 - done)
 
         self.optimizer.zero_grad()
-        loss = self.lossFun(target.detach(), qValue)
+        loss = self.lossFun(qValue, target.detach())
         loss.backward()
         # torch.nn.utils.clip_grad_norm(self.net.parameters(), 0.5)
         self.optimizer.step()

@@ -54,7 +54,9 @@ paramsPath = os.path.join(
 
 if os.path.exists(paramsPath):
     agent.net.load_state_dict(torch.load(paramsPath, map_location=device))
+    agent.netTarget.load_state_dict(torch.load(paramsPath, map_location=device))
     agent.net.train()
+    agent.epsilonStart = 0.98
 
 reward_history = []
 
@@ -84,7 +86,7 @@ for n_episode in range(3000):
     startTime = time.time()
     t = 0
 
-    for t in range(3000):  # Don't infinite loop while learning
+    for t in range(10 ** 5):  # Don't infinite loop while learning
         if RENDER:
             env.render()
 

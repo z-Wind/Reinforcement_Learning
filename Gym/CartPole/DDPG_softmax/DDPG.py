@@ -147,7 +147,7 @@ class DDPG:
 
         loss_fn = torch.nn.MSELoss()
         self.optimizerCritic.zero_grad()
-        loss = loss_fn(target, predict)
+        loss = loss_fn(predict, target)
         loss.backward()
         self.optimizerCritic.step()
 

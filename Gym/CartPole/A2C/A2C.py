@@ -97,7 +97,7 @@ class A2C:
 
         self.optimizerActorCriticEval.zero_grad()
         lossFun = torch.nn.MSELoss()
-        loss = lossFun(target, predict)
+        loss = lossFun(predict, target)
         loss.backward()
         # 梯度裁剪，以免爆炸
         # torch.nn.utils.clip_grad_norm(actor_network.parameters(),0.5)
@@ -115,7 +115,7 @@ class A2C:
 
             self.optimizerActorCriticEval.zero_grad()
             lossFun = torch.nn.MSELoss()
-            loss = lossFun(target, predict)
+            loss = lossFun(predict, target)
             loss.backward()
             # 梯度裁剪，以免爆炸
             # torch.nn.utils.clip_grad_norm(actor_network.parameters(),0.5)

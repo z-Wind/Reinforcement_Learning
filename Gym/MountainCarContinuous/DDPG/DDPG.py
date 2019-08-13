@@ -147,7 +147,7 @@ class DDPG:
 
         loss_fn = torch.nn.MSELoss(reduction="sum")
         self.optimizerCritic.zero_grad()
-        loss = loss_fn(target, predict)
+        loss = loss_fn(predict, target)
         loss.backward()
         # 梯度裁剪，以免爆炸
         # torch.nn.utils.clip_grad_norm(actor_network.parameters(),0.5)
