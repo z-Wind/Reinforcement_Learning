@@ -1,8 +1,9 @@
 import gym
-from .A2C import A2C
 import matplotlib.pyplot as plt
 import torch
 import os
+
+from .A2C import A2C
 
 RENDER = True  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
 
@@ -36,21 +37,6 @@ agent.actorCriticEval.eval()
 reward_history = []
 
 
-def plot_durations():
-    y_t = torch.FloatTensor(reward_history)
-    plt.figure(1)
-    plt.clf()
-    plt.title("Testing...")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.plot(y_t.numpy())
-    # Take 100 episode averages and plot them too
-    if len(reward_history) >= 100:
-        means = y_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
-
-    plt.pause(0.001)  # pause a bit so that plots are updated
 
 
 for n_episode in range(3000):
@@ -71,7 +57,7 @@ for n_episode in range(3000):
 
     reward_history.append(sumR)
     if RENDER:
-        plot_durations()
+        plot_durations(reward_history)
 
     avgR = sum(reward_history[:-11:-1]) / 10
     print(

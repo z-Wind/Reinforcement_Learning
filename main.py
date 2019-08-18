@@ -39,7 +39,7 @@ allList = {
         "MountainCar": ["QLearning"],
         "MountainCarContinuous": ["DDPG"],
         "Pendulum": ["A2C", "DDPG"],
-        # "Pong": ["DDPG", "QLearning"],
+        "Pong": ["QLearning"],  # "DDPG",
     }
 }
 

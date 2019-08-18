@@ -1,9 +1,10 @@
 import torch
 import torch.nn.functional as F
 from torch.distributions import Normal
-from .memory import MemoryDataset
 from collections import namedtuple
 import numpy as np
+
+from Gym.tools.utils import MemoryDataset
 
 torch.manual_seed(500)  # 固定隨機種子 for 再現性
 

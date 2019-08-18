@@ -1,8 +1,9 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from .utils import MemoryDataset
 from collections import namedtuple
+
+from Gym.tools.utils import MemoryDataset
 
 torch.manual_seed(500)  # 固定隨機種子 for 再現性
 

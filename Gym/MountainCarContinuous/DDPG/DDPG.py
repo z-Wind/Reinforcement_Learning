@@ -1,8 +1,9 @@
 import torch
 import torch.nn.functional as F
-from .utils import MemoryDataset, OrnsteinUhlenbeckNoise
 from collections import namedtuple
 import numpy as np
+
+from Gym.tools.utils import MemoryDataset, OrnsteinUhlenbeckNoise
 
 torch.manual_seed(500)  # 固定隨機種子 for 再現性
 

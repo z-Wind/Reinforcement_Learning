@@ -1,11 +1,14 @@
 import gym
-from .DDPG import DDPG
 import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 import numpy as np
 import os
-from .atari_wrappers import wrap_env
+import time
+
+from .DDPG import DDPG
+from Gym.tools.atari_wrappers import wrap_env
+from Gym.tools.utils import plot_durations
 
 
 RENDER = False  # 顯示模擬會拖慢運行速度, 等學得差不多了再顯示
@@ -32,14 +35,18 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 agent = DDPG(
     device=device,
     n_actions=env.action_space.n,
-    n_actionRange=(1, 0),
+    n_actionRange=(env.action_space.n, 0),
     n_features=256,
     img_shape=env.observation_space.shape,
     learning_rate=0.001,
     gamma=0.99,
     tau=0.01,
+    epsilonStart=0,
+    epsilonUpdateSteps=10 ** 5,
+    updateTargetFreq=10000,
     mSize=1_000_000,
     batchSize=100,
+    startTrainSize=100,
     # transforms=data_transform,
 )
 
@@ -50,46 +57,34 @@ paramsPath = os.path.join(
 )
 
 if os.path.exists(paramsPath):
+    print(f"Load parameters from {paramsPath}")
     agent.actorCriticEval.load_state_dict(torch.load(paramsPath, map_location=device))
     agent.actorCriticTarget.load_state_dict(torch.load(paramsPath, map_location=device))
     agent.actorCriticEval.train()
+    agent.epsilonStart = 0.98
 
 
 reward_history = []
 
 
-def plot_durations():
-    y_t = torch.FloatTensor(reward_history)
-    plt.figure(1)
-    plt.clf()
-    plt.title("Training...")
-    plt.xlabel("Episode")
-    plt.ylabel("Reward")
-    plt.plot(y_t.numpy())
-    # Take 100 episode averages and plot them too
-    if len(reward_history) >= 100:
-        means = y_t.unfold(0, 100, 1).mean(1).view(-1)
-        means = torch.cat((torch.zeros(99), means))
-        plt.plot(means.numpy())
-
-    plt.pause(0.001)  # pause a bit so that plots are updated
-
-
 maxR = float("-inf")
 for n_episode in range(3000):
     state = env.reset()
+    startTime = time.time()
     sumR = 0
-    for t in range(3000):  # Don't infinite loop while learning
+
+    for t in range(10 ** 5):  # Don't infinite loop while learning
         if RENDER:
             env.render()
 
-        action = agent.choose_action(state, t)
+        action = agent.choose_action(state)
         a = np.argmax(action)
         state_, reward, done, _ = env.step(a)
         agent.store_trajectory(state, action, reward, done, state_)
 
-        agent.trainCriticTD()
-        agent.trainActor()
+        agent.train()
+        agent.decay_epsilon()
+        agent.updateTarget()
 
         sumR += reward
         if done:
@@ -97,25 +92,25 @@ for n_episode in range(3000):
 
         state = state_
 
-    agent.updateTarget()
-
     reward_history.append(sumR)
     if RENDER:
-        plot_durations()
+        plot_durations(reward_history)
 
     avgR = sum(reward_history[:-11:-1]) / 10
-    if avgR > maxR:
-        maxR = avgR
-    print(
-        f"episode: {n_episode:4d}\tduration: {t:4d}\tReward: {sumR:5.1f}\tavgR: {avgR:5.1f}\tmaxR: {maxR:5.1f}"
-    )
 
     # 訓練成功條件
-    if avgR > 20 and n_episode > 10:
+    if avgR > 19 and n_episode > 10:
         break
 
-    # 儲存 model 參數
-    torch.save(agent.actorCriticEval.state_dict(), paramsPath)
+    if avgR > maxR and n_episode > 10:
+        maxR = avgR
+        print("Saving model after {} episodes...".format(n_episode))
+        # 儲存 model 參數
+        torch.save(agent.actorCriticEval.state_dict(), paramsPath)
+
+    print(
+        f"episode: {n_episode:4d} totalTrainStep: {agent.trainStep:7d} duration: {t:4d} Reward: {sumR:5.1f} avgR: {avgR:5.1f} maxR: {maxR:5.1f} epsilon:{agent.epsilon:1.2f} maxAction:{agent.max_noise_action:1.2f} durationTime:{time.time()-startTime:2.2f}"
+    )
 
 # 儲存最佳 model 參數
 torch.save(agent.actorCriticEval.state_dict(), paramsPath + ".best")
