@@ -6,6 +6,7 @@ from collections import deque
 import cv2
 from matplotlib import pyplot as plt
 import time
+import itertools
 
 
 class MemoryDataset(Dataset):
@@ -17,12 +18,25 @@ class MemoryDataset(Dataset):
         return len(self.memory)
 
     def __getitem__(self, idx):
-        sample = self.memory[idx]
+        try:
+            sample = self.memory[idx]
+        except TypeError:
+            sample = itertools.islice(self.memory, idx.start, idx.stop, idx.step)
 
         if self.transforms:
             sample = self.transforms(sample)
 
         return sample
+
+    def __setitem__(self, idx, value):
+        self.memory[idx] = value
+
+    def __delitem__(self, idx):
+        try:
+            del self.memory[idx]
+        except TypeError:
+            for x in list(itertools.islice(self.memory, idx.start, idx.stop, idx.step)):
+                self.memory.remove(x)
 
     def add(self, s, a, r, done, s_):
         """

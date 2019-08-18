@@ -33,7 +33,6 @@ class A2CBase(IModels):
         #
         mSize=1_000_000,
         batchSize=32,
-        startTrainSize=100,
         #
         transforms=None,
     ):
@@ -47,7 +46,6 @@ class A2CBase(IModels):
 
         self.memory = MemoryDataset(mSize, transforms)
         self.batchSize = batchSize
-        self.startTrainSize = startTrainSize
 
         self.lr = learning_rate
         # reward 衰減係數
@@ -69,16 +67,15 @@ class A2CBase(IModels):
         state = torch.unsqueeze(state, dim=0).to(self.device)
         action = self.actorCriticEval.actor(state)
 
-        action = action.cpu().data.numpy()
-        actionItem = None
+        log_prob = None
 
-        return (action, actionItem)
+        return (action, log_prob)
 
     def store_trajectory(self, s, a, r, done, s_):
         self.memory.add(s, a, r, done, s_)
 
     def train_step(self):
-        if len(self.memory) < self.startTrainSize:
+        if len(self.memory) < 2:
             return
 
         self.trainStep += 1
@@ -89,37 +86,35 @@ class A2CBase(IModels):
         self.update_target()
 
     def train_episode(self):
-        pass
+        del self.memory[:]
 
     def train_actor(self):
-        batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
+        batch = Trajectory(*self.memory[-1])
 
         # 轉成 np.array 加快轉換速度
         s = np.array(batch.state)
-        aItem = np.array([x[1] for x in batch.action])
         r = np.array(batch.reward)
         s_ = np.array(batch.next_state)
 
         s = torch.FloatTensor(s).to(self.device)
-        aItem = torch.FloatTensor(aItem)
+        s = torch.unsqueeze(s, dim=0)
         r = torch.FloatTensor(r).to(self.device)
         s_ = torch.FloatTensor(s_).to(self.device)
+        s_ = torch.unsqueeze(s_, dim=0)
 
-        _, nowVal = self.actorCriticTarget(s)
+        nowVal = self.actorCriticTarget.critic(s)
         nowVal = torch.squeeze(nowVal)
 
-        _, futureVal = self.actorCriticTarget(s_)
+        futureVal = self.actorCriticTarget.critic(s_)
         futureVal = torch.squeeze(futureVal)
 
-        adv = r + futureVal - nowVal
+        adv = r + self.gamma * futureVal - nowVal
         adv = adv.detach()
 
-        a = self.actorCriticEval.actor(s)
-        m = Categorical(a)
-        log_prob = m.log_prob(aItem)
+        log_prob = batch.action[1]
 
         loss = -log_prob * adv
-        loss = loss.sum()
+        loss = loss.mean()
 
         self.optimizerActor.zero_grad()
         loss.backward()
@@ -136,25 +131,22 @@ class A2CBase(IModels):
 
         # 轉成 np.array 加快轉換速度
         s = np.array(batch.state)
-        a = np.array([x[0] for x in batch.action])
         r = np.array(batch.reward)
         done = np.array(batch.done)
         s_ = np.array(batch.next_state)
 
         s = torch.FloatTensor(s).to(self.device)
-        a = torch.FloatTensor(a)
-        a = torch.squeeze(a, dim=1).to(self.device)
         r = torch.FloatTensor(r).to(self.device)
         done = torch.FloatTensor(done).to(self.device)
         s_ = torch.FloatTensor(s_).to(self.device)
 
-        _, futureVal = self.actorCriticTarget(s_)
+        futureVal = self.actorCriticTarget.critic(s_)
         futureVal = torch.squeeze(futureVal)
 
         val = r + self.gamma * futureVal * (1 - done)
         target = val.detach()
 
-        predict = self.actorCriticEval.critic(s, a)
+        predict = self.actorCriticEval.critic(s)
         predict = torch.squeeze(predict)
 
         loss_fn = torch.nn.MSELoss()
@@ -209,4 +201,3 @@ class A2CBase(IModels):
 
     def print_info(self):
         print(f"totalTrainStep:{self.trainStep:7d}")
-

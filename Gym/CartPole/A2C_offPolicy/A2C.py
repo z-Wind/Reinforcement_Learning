@@ -18,7 +18,6 @@ class A2C(A2CBase):
         updateTargetFreq=10000,
         mSize=10000,
         batchSize=200,
-        startTrainSize=100,
         transforms=None,
     ):
         actorCriticEval = ActorCriticNet(n_actions, n_features)
@@ -46,7 +45,6 @@ class A2C(A2CBase):
             updateTargetFreq=updateTargetFreq,
             mSize=mSize,
             batchSize=batchSize,
-            startTrainSize=startTrainSize,
         )
 
     def choose_action(self, state):
@@ -54,8 +52,11 @@ class A2C(A2CBase):
 
         m = Categorical(torch.FloatTensor(action))
         a = m.sample()
+        log_prob = m.log_prob(a)
 
-        return (action, a.item()), a.item()
+        action = action.cpu().data.numpy()
+
+        return (action, log_prob), a.item()
 
 
 class ActorNet(torch.nn.Module):
@@ -73,29 +74,18 @@ class ActorNet(torch.nn.Module):
 
 
 class CriticNet(torch.nn.Module):
-    def __init__(self, n_actions, n_features):
+    def __init__(self, n_features):
         super(CriticNet, self).__init__()
         # 定義每層用什麼樣的形式
-        self.fcVal1_s = torch.nn.Linear(n_features, 256)
-        self.fcVal2_s = torch.nn.Linear(256, 128)
+        self.fc1 = torch.nn.Linear(n_features, 256)
+        self.fc2 = torch.nn.Linear(256, 1)
 
-        self.fcVal1_a = torch.nn.Linear(n_actions, 128)
-
-        self.fcVal3 = torch.nn.Linear(256, 128)
-        self.fcVal4 = torch.nn.Linear(128, 1)
-
-    def forward(self, x, a):  # 這同時也是 Module 中的 forward 功能
+    def forward(self, x):  # 這同時也是 Module 中的 forward 功能
         # 正向傳播輸入值, 神經網絡分析出輸出值
-        x_v = F.relu(self.fcVal1_s(x))
-        x_v = F.relu(self.fcVal2_s(x_v))
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
 
-        x_a = F.relu(self.fcVal1_a(a))
-
-        x = torch.cat((x_v, x_a), dim=1)
-        x = F.relu(self.fcVal3(x))
-        qVal = self.fcVal4(x)
-
-        return qVal
+        return x
 
 
 class ActorCriticNet(torch.nn.Module):
@@ -103,11 +93,11 @@ class ActorCriticNet(torch.nn.Module):
         super(ActorCriticNet, self).__init__()
         # 定義每層用什麼樣的形式
         self.actor = ActorNet(n_actions, n_features)
-        self.critic = CriticNet(n_actions, n_features)
+        self.critic = CriticNet(n_features)
 
     def forward(self, x):  # 這同時也是 Module 中的 forward 功能
         # 正向傳播輸入值, 神經網絡分析出輸出值
         action = self.actor(x)
-        qVal = self.critic(x, action)
+        val = self.critic(x)
 
-        return action, qVal
+        return action, val
