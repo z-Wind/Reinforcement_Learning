@@ -1,260 +1,69 @@
 import torch
 import torch.nn.functional as F
-from collections import namedtuple
 import numpy as np
 
-from Gym.tools.utils import MemoryDataset, OrnsteinUhlenbeckNoise
-
-torch.manual_seed(500)  # 固定隨機種子 for 再現性
-
-Trajectory = namedtuple(
-    "Transition", ("state", "action", "reward", "done", "next_state")
-)
+from Gym.models.DDPGBase import DDPGBase
 
 
-class DDPG:
+class DDPG(DDPGBase):
     def __init__(
         self,
         device,
         n_actions,
-        n_actionRange,
         n_features,
         img_shape,
-        learning_rate=0.0001,
-        gamma=0.99,
-        tau=0.01,
-        epsilonStart=0,
-        epsilonUpdateSteps=10 ** 5,
+        learning_rate=0.01,
+        gamma=0.9,
+        tau=0.001,
+        noiseStart=2,
+        noiseEnd=0.2,
+        noiseDecayFreq=10 ** 5,
         updateTargetFreq=10000,
-        mSize=1_000_000,
-        batchSize=32,
+        mSize=10000,
+        batchSize=200,
         startTrainSize=100,
         transforms=None,
     ):
-        self.device = device
-        self.max_noise_action = n_actionRange[0]
-        self.max_noise_actionStart = self.max_noise_action
-
-        self.n_actionRange = torch.tensor(list(n_actionRange))
-        self.actorCriticEval = ActorCriticNet(img_shape, n_actions, n_features).to(
-            self.device
-        )
-        self.actorCriticTarget = ActorCriticNet(img_shape, n_actions, n_features).to(
-            self.device
-        )
-
-        print(self.device)
-        print(self.actorCriticEval)
-
-        self.transforms = transforms
-        self.memory = MemoryDataset(mSize, transforms=transforms)
-        self.batchSize = batchSize
-        self.startTrainSize = startTrainSize
-
-        self.lr = learning_rate
-        # reward 衰減係數
-        self.gamma = gamma
-        self.tau = tau
-
-        self.epsilon = epsilonStart
-        self.epsilonStart = epsilonStart
-        self.epsilonUpdateSteps = epsilonUpdateSteps
-
-        self.updateTargetFreq = updateTargetFreq
-
-        self.noise = OrnsteinUhlenbeckNoise(n_actions)
+        actorCriticEval = ActorCriticNet(img_shape, n_actions, n_features)
+        actorCriticTarget = ActorCriticNet(img_shape, n_actions, n_features)
 
         # optimizer 是訓練的工具
         # 傳入 net 的所有參數, 學習率
-        self.optimizerCritic = torch.optim.Adam(
-            [
-                {
-                    "params": self.actorCriticEval.img_featuresCritic.parameters(),
-                    "lr": self.lr,
-                },
-                {"params": self.actorCriticEval.critic.parameters()},
-            ],
-            lr=self.lr,
+        optimizerCritic = torch.optim.Adam(
+            actorCriticEval.critic.parameters(), lr=learning_rate
         )
-        self.optimizerActor = torch.optim.Adam(
-            [
-                {
-                    "params": self.actorCriticEval.img_featuresActor.parameters(),
-                    "lr": self.lr,
-                },
-                {"params": self.actorCriticEval.actor.parameters()},
-            ],
-            lr=self.lr,
+        optimizerActor = torch.optim.Adam(
+            actorCriticEval.actor.parameters(), lr=learning_rate
         )
 
-        # 從 1 開始，以免 updateTarget
-        self.trainStep = 1
-
-    def decay_epsilon(self):
-        self.epsilon = min(
-            0.98, self.epsilonStart + self.trainStep / self.epsilonUpdateSteps
-        )
-        self.max_noise_action = max(
-            1, self.max_noise_actionStart - self.trainStep / self.epsilonUpdateSteps
+        super().__init__(
+            device=device,
+            actorCriticEval=actorCriticEval,
+            actorCriticTarget=actorCriticTarget,
+            optimizerCritic=optimizerCritic,
+            optimizerActor=optimizerActor,
+            n_actions=n_actions,
+            learning_rate=learning_rate,
+            gamma=gamma,
+            tau=tau,
+            noiseStart=noiseStart,
+            noiseEnd=noiseEnd,
+            noiseDecayFreq=noiseDecayFreq,
+            updateTargetFreq=updateTargetFreq,
+            mSize=mSize,
+            batchSize=batchSize,
+            startTrainSize=startTrainSize,
+            transforms=transforms,
         )
 
     def choose_action(self, state):
-        state = torch.FloatTensor(state)
-        state = torch.unsqueeze(state, dim=0).to(self.device)
+        action = super().choose_action(state)
 
-        # choice = np.random.choice([0, 1], p=((1 - self.epsilon), self.epsilon))
+        action = F.softmax(torch.from_numpy(action), dim=1).numpy()
 
-        # if choice == 0 and self.actorCriticEval.training:
-        #    # get action based on observation, use exploration policy here
-        #    action = self.get_exploration_action(state)
-        # else:
-        #    # validate every nth episode
-        #    action = self.get_exploitation_action(state)
+        a = np.argmax(action, axis=1)[0]
 
-        if self.actorCriticEval.training:
-            # get action based on observation, use exploration policy here
-            action = self.get_exploration_action(state)
-        else:
-            # validate every nth episode
-            action = self.get_exploitation_action(state)
-
-        return action.cpu().data.numpy()
-
-    def get_exploitation_action(self, state):
-        action = self.actorCriticEval.action(state)
-
-        return action
-
-    def get_exploration_action(self, state):
-        action = self.actorCriticEval.action(state)
-        noise = self.noise() * self.max_noise_action
-
-        action = action + torch.from_numpy(noise).float().to(self.device)
-        action = F.softmax(action, dim=1)
-
-        return action
-
-    def store_trajectory(self, s, a, r, done, s_):
-        self.memory.add(s, a, r, done, s_)
-
-    def train(self):
-        if len(self.memory) < self.startTrainSize:
-            return
-
-        self.trainStep += 1
-
-        self.trainCriticTD()
-        self.trainActor()
-
-    # episode train
-    def trainActor(self):
-        batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
-
-        # 轉成 np.array 加快轉換速度
-        s = np.array(batch.state)
-        s = torch.FloatTensor(s).to(self.device)
-
-        a = self.actorCriticEval.action(s)
-        qVal = self.actorCriticEval.qValue(s, a)
-        loss = -qVal.mean()
-
-        self.optimizerActor.zero_grad()
-        loss.backward()
-        self.optimizerActor.step()
-
-        # print(loss.item())
-        # print(list(self.actorCriticEval.img_features.parameters()))
-        # print(list(self.actorCriticEval.actor.parameters()))
-        # print("=============================================")
-
-    # step train
-    def trainCriticTD(self):
-        batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
-
-        # 轉成 np.array 加快轉換速度
-        s = np.array(batch.state)
-        a = np.array(batch.action)
-        r = np.array(batch.reward)
-        done = np.array(batch.done)
-        s_ = np.array(batch.next_state)
-
-        s = torch.FloatTensor(s).to(self.device)
-        a = torch.FloatTensor(a)
-        a = torch.squeeze(a, dim=1).to(self.device)
-        r = torch.FloatTensor(r).to(self.device)
-        done = torch.FloatTensor(done).to(self.device)
-        s_ = torch.FloatTensor(s_).to(self.device)
-
-        a_, futureVal = self.actorCriticTarget(s_)
-
-        futureVal = torch.squeeze(futureVal)
-        val = r + self.gamma * futureVal * (1 - done)
-        target = val.detach()
-        predict = self.actorCriticEval.qValue(s, a)
-        predict = torch.squeeze(predict)
-
-        loss_fn = torch.nn.MSELoss()
-        self.optimizerCritic.zero_grad()
-        loss = loss_fn(predict, target)
-        loss.backward()
-        # 梯度裁剪，以免爆炸
-        # torch.nn.utils.clip_grad_norm(actor_network.parameters(),0.5)
-        self.optimizerCritic.step()
-
-        # print(list(self.actorCriticEval.img_features.parameters()))
-        # print(list(self.actorCriticEval.critic.parameters()))
-        # print("=============================================")
-
-        return loss
-
-    # 逐步更新 target NN
-    def updateTarget(self):
-        if (self.trainStep % self.updateTargetFreq) != 0:
-            return
-
-        print(f"Update target network... tau={self.tau}")
-        for paramEval, paramTarget in zip(
-            self.actorCriticEval.parameters(), self.actorCriticTarget.parameters()
-        ):
-            paramTarget.data = paramEval.data + self.tau * (
-                paramTarget.data - paramEval.data
-            )
-
-    def teach(self):
-        if len(self.memory) < self.batchSize * 10:
-            return None
-
-        batch = Trajectory(*zip(*self.memory.sample(self.batchSize)))
-
-        # 轉成 np.array 加快轉換速度
-        s = np.array(batch.state)
-        a = np.array(batch.action)
-        r = np.array(batch.reward)
-        done = np.array(batch.done)
-        s_ = np.array(batch.next_state)
-
-        s = torch.FloatTensor(s).to(self.device)
-        a = torch.FloatTensor(a)
-        a = torch.squeeze(a, dim=1).to(self.device)
-        r = torch.FloatTensor(r).to(self.device)
-        done = torch.FloatTensor(done).to(self.device)
-        s_ = torch.FloatTensor(s_).to(self.device)
-
-        # Critic
-        lossC = self.trainCriticTD()
-
-        # Actor
-        action = self.actorCriticEval.action(s)
-        loss_fn = torch.nn.MSELoss()
-        self.optimizerActor.zero_grad()
-        lossA = loss_fn(a, action)
-        lossA.backward()
-        self.optimizerActor.step()
-
-        loss = lossC + lossA
-        # print(f"loss:{loss:.2f} lossC:{lossC:.2f} lossA:{lossA:.2f}")
-
-        return loss.item()
+        return action, a
 
 
 class ActorNet(torch.nn.Module):
@@ -379,7 +188,7 @@ class ActorCriticNet(torch.nn.Module):
 
         return action
 
-    def qValue(self, x, a):
+    def criticism(self, x, a):
         x = self.img_featuresCritic(x)
         qVal = self.critic(x, a)
 

@@ -7,7 +7,7 @@ def run_command(args, wait=False, timeout=None, debug=False):
     try:
         if debug:
             p = subprocess.Popen(args, stdout=subprocess.PIPE)
-            time.sleep(60)
+            time.sleep(20)
             p.kill()
         elif wait:
             p = subprocess.Popen(args)
@@ -35,15 +35,16 @@ def run_command(args, wait=False, timeout=None, debug=False):
 allList = {
     "Gym": {
         "Acrobot": ["A2C", "PolicyGradient", "QLearning"],
-        "CartPole": ["A2C", "DDPG", "DDPG_softmax", "PolicyGradient", "QLearning"],
+        "CartPole": ["A2C", "DDPG_tanh", "DDPG_softmax", "PolicyGradient", "QLearning"],
         "MountainCar": ["QLearning"],
         "MountainCarContinuous": ["DDPG"],
-        "Pendulum": ["A2C", "DDPG"],
+        "Pendulum": ["A2C", "AC", "DDPG"],
         "Pong": ["QLearning"],  # "DDPG",
     }
 }
 
-debug = True
+debug = False
+onlyTest = True
 for platform, envs in allList.items():
     for env, methods in envs.items():
         for method in methods:
@@ -51,8 +52,10 @@ for platform, envs in allList.items():
             print("=================================================")
             print(package)
             print("=================================================")
-            if debug:
-                run_command(["python", "-m", f"{package}.train"], debug=True)
-            else:
-                run_command(["python", "-m", f"{package}.train"], wait=True)
+            if not onlyTest:
+                if debug:
+                    run_command(["python", "-m", f"{package}.train"], debug=True)
+                else:
+                    run_command(["python", "-m", f"{package}.train"], wait=True)
+
             run_command(["python", "-m", f"{package}.test"], timeout=10)

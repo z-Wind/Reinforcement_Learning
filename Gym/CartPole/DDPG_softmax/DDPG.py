@@ -11,12 +11,12 @@ class DDPG(DDPGBase):
         device,
         n_actions,
         n_features,
-        max_noise=2,
-        min_noise=0.2,
         learning_rate=0.01,
         gamma=0.9,
         tau=0.001,
-        decayFreq=10 ** 5,
+        noiseStart=2,
+        noiseEnd=0.2,
+        noiseDecayFreq=10 ** 5,
         updateTargetFreq=10000,
         mSize=10000,
         batchSize=200,
@@ -42,16 +42,17 @@ class DDPG(DDPGBase):
             optimizerCritic=optimizerCritic,
             optimizerActor=optimizerActor,
             n_actions=n_actions,
-            max_noise=max_noise,
-            min_noise=min_noise,
             learning_rate=learning_rate,
             gamma=gamma,
             tau=tau,
-            decayFreq=decayFreq,
+            noiseStart=noiseStart,
+            noiseEnd=noiseEnd,
+            noiseDecayFreq=noiseDecayFreq,
             updateTargetFreq=updateTargetFreq,
             mSize=mSize,
             batchSize=batchSize,
             startTrainSize=startTrainSize,
+            transforms=transforms,
         )
 
     def choose_action(self, state):
@@ -122,7 +123,7 @@ class ActorCriticNet(torch.nn.Module):
         action = self.actor(x)
         return action
 
-    def qValue(self, x, a):
+    def criticism(self, x, a):
         qVal = self.critic(x, a)
 
         return qVal

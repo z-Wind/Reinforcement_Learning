@@ -23,22 +23,34 @@ class DDPGBase(IModels):
         optimizerActor,
         #
         n_actions,
-        max_noise,
-        min_noise,
         #
-        learning_rate=0.0001,
-        gamma=0.99,
-        tau=0.01,
+        learning_rate,
+        gamma,
+        tau,
         #
-        decayFreq=10 ** 5,
-        updateTargetFreq=10000,
+        updateTargetFreq,
         #
-        mSize=1_000_000,
-        batchSize=32,
-        startTrainSize=100,
+        noiseStart,
+        noiseEnd,
+        noiseDecayFreq,
         #
-        transforms=None,
+        mSize,
+        batchSize,
+        startTrainSize,
+        #
+        transforms,
     ):
+        """
+        gamma: reward 的衰減係數
+        tau: update target 的係數，target = eval + tau * (target - eval)
+        noiseStart: noise 的起始值，變化的幅度，越大越隨機
+        noiseEnd: noise 的終值
+        noiseDecayFreq: noise 衰減頻率
+        updateTargetFreq: 更新 target 的頻率
+        startTrainSize: 當 memory size 大於此值時，便開始訓練
+        """
+        super().__init__(device, mSize, transforms)
+
         self.device = device
 
         self.actorCriticEval = actorCriticEval.to(self.device)
@@ -47,7 +59,7 @@ class DDPGBase(IModels):
         print("device", self.device)
         print(self.actorCriticEval)
 
-        self.memory = MemoryDataset(mSize, transforms)
+        # self.memory = MemoryDataset(mSize, transforms)
         self.batchSize = batchSize
         self.startTrainSize = startTrainSize
 
@@ -58,11 +70,12 @@ class DDPGBase(IModels):
         self.tau = tau
 
         self.updateTargetFreq = updateTargetFreq
-        self.decayFreq = decayFreq
+        self.noiseDecayFreq = noiseDecayFreq
 
         self.noise = OrnsteinUhlenbeckNoise(n_actions)
-        self.max_noise = max_noise
-        self.min_noise = min_noise
+        self.noiseStart = noiseStart
+        self.noiseAmp = noiseStart
+        self.noiseEnd = noiseEnd
 
         # optimizer 是訓練的工具
         self.optimizerCritic = optimizerCritic
@@ -74,8 +87,9 @@ class DDPGBase(IModels):
         self.decay_parameters()
 
     def decay_parameters(self):
-        self.noise_amp = max(
-            self.min_noise, self.max_noise - self.trainStep / self.decayFreq
+        # 因 self.trainStep = 1 開始，需減 1
+        self.noiseAmp = max(
+            self.noiseEnd, self.noiseStart - self.trainStep / self.noiseDecayFreq
         )
 
     def choose_action(self, state):
@@ -83,10 +97,9 @@ class DDPGBase(IModels):
         state = torch.unsqueeze(state, dim=0).to(self.device)
 
         if self.actorCriticEval.training:
-            # get action based on observation, use exploration policy here
+            # 加入隨機 noise
             action = self.get_exploration_action(state)
         else:
-            # validate every nth episode
             action = self.get_exploitation_action(state)
 
         action = action.cpu().data.numpy()
@@ -99,7 +112,7 @@ class DDPGBase(IModels):
 
     def get_exploration_action(self, state):
         action = self.actorCriticEval.action(state)
-        noise = self.noise() * self.noise_amp
+        noise = self.noise() * self.noiseAmp
 
         action = action + torch.from_numpy(noise).float().to(self.device)
 
@@ -112,12 +125,12 @@ class DDPGBase(IModels):
         if len(self.memory) < self.startTrainSize:
             return
 
-        self.trainStep += 1
-
         self.train_criticTD()
         self.train_actor()
-
         self.decay_parameters()
+
+        self.trainStep += 1
+
         self.update_target()
 
     def train_episode(self):
@@ -131,7 +144,7 @@ class DDPGBase(IModels):
         s = torch.FloatTensor(s).to(self.device)
 
         a = self.actorCriticEval.action(s)
-        qVal = self.actorCriticEval.qValue(s, a)
+        qVal = self.actorCriticEval.criticism(s, a)
         loss = -qVal.mean()
 
         self.optimizerActor.zero_grad()
@@ -167,7 +180,7 @@ class DDPGBase(IModels):
         val = r + self.gamma * futureVal * (1 - done)
         target = val.detach()
 
-        predict = self.actorCriticEval.qValue(s, a)
+        predict = self.actorCriticEval.criticism(s, a)
         predict = torch.squeeze(predict)
 
         loss_fn = torch.nn.MSELoss()
@@ -194,34 +207,37 @@ class DDPGBase(IModels):
                 paramTarget.data - paramEval.data
             )
 
-    def get_default_params_path(self, filePath, envName):
-        _dirPath = os.path.dirname(os.path.realpath(filePath))
-        paramsPath = os.path.join(
-            _dirPath, f"params_{envName}_{type(self).__name__}_{self.device.type}.pkl"
-        )
+    # def get_default_params_path(self, filePath, envName):
+    #    _dirPath = os.path.dirname(os.path.realpath(filePath))
+    #    paramsPath = os.path.join(
+    #        _dirPath, f"params_{envName}_{type(self).__name__}_{self.device.type}.pkl"
+    #    )
 
-        return paramsPath
+    #    return paramsPath
 
     def save_models(self, paramsPath):
         print(f"Save parameters to {paramsPath}")
         torch.save(self.actorCriticEval.state_dict(), paramsPath)
 
     def load_models(self, paramsPath):
-        if os.path.exists(paramsPath):
-            print(f"Load parameters from {paramsPath}")
-            self.actorCriticEval.load_state_dict(
-                torch.load(paramsPath, map_location=self.device)
-            )
-            self.actorCriticTarget.load_state_dict(
-                torch.load(paramsPath, map_location=self.device)
-            )
-            self.noise_amp = self.min_noise
-            self.max_noise = self.min_noise
+        if not os.path.exists(paramsPath):
+            return False
+
+        print(f"Load parameters from {paramsPath}")
+        self.actorCriticEval.load_state_dict(
+            torch.load(paramsPath, map_location=self.device)
+        )
+        self.actorCriticTarget.load_state_dict(
+            torch.load(paramsPath, map_location=self.device)
+        )
+        self.noiseAmp = self.noiseEnd
+        self.noiseStart = self.noiseEnd
+
+        return True
 
     def eval(self):
         print("Evaluation Mode")
         self.actorCriticEval.eval()
 
     def print_info(self):
-        print(f"totalTrainStep:{self.trainStep:7d} noise_amp:{self.noise_amp:.2f}")
-
+        print(f"totalTrainStep:{self.trainStep:7d} noiseAmp:{self.noiseAmp:.2f}")
